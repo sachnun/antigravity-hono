@@ -25,40 +25,50 @@ const MessageSchema = z.object({
 const ToolFunctionSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  parameters: z.record(z.string(), z.unknown()).optional(),
+  parameters: z.any().optional(),
   strict: z.boolean().optional(),
 })
 
 const ToolSchema = z.object({
   type: z.literal('function'),
   function: ToolFunctionSchema,
+}).openapi({
+  example: {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: 'Get the current weather in a location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'City name' },
+        },
+        required: ['location'],
+      },
+    },
+  },
 })
 
 export const ChatCompletionRequestSchema = z.object({
-  model: z.string().openapi({ example: 'gemini-2.5-flash' }),
-  messages: z.array(MessageSchema).openapi({
-    example: [{ role: 'user', content: 'Hello!' }],
-  }),
-  temperature: z.number().min(0).max(2).optional().default(1),
-  top_p: z.number().min(0).max(1).optional().default(1),
-  n: z.number().int().min(1).optional().default(1),
-  stream: z.boolean().optional().default(false),
+  model: z.string(),
+  messages: z.array(MessageSchema),
+  temperature: z.number().min(0).max(2).optional(),
+  top_p: z.number().min(0).max(1).optional(),
+  n: z.number().int().min(1).optional(),
+  stream: z.boolean().optional(),
   stop: z.union([z.string(), z.array(z.string())]).optional(),
   max_tokens: z.number().int().optional(),
   max_completion_tokens: z.number().int().optional(),
-  presence_penalty: z.number().min(-2).max(2).optional().default(0),
-  frequency_penalty: z.number().min(-2).max(2).optional().default(0),
+  presence_penalty: z.number().min(-2).max(2).optional(),
+  frequency_penalty: z.number().min(-2).max(2).optional(),
   reasoning_effort: z.enum(['none', 'low', 'medium', 'high']).optional().openapi({
     description: 'Reasoning effort level for thinking models',
-    example: 'medium',
   }),
   thinking_budget: z.number().int().min(0).max(32000).optional().openapi({
     description: 'Explicit thinking budget in tokens (overrides reasoning_effort)',
-    example: 8192,
   }),
   include_thoughts: z.boolean().optional().openapi({
     description: 'Include thinking/reasoning tokens in response (defaults to true when thinking is enabled)',
-    example: true,
   }),
   tools: z.array(ToolSchema).optional(),
   tool_choice: z.union([
@@ -72,11 +82,16 @@ export const ChatCompletionRequestSchema = z.object({
     type: z.enum(['text', 'json_object', 'json_schema']),
     json_schema: z.object({
       name: z.string(),
-      schema: z.record(z.string(), z.unknown()),
+      schema: z.any(),
       strict: z.boolean().optional(),
     }).optional(),
   }).optional(),
-}).openapi('ChatCompletionRequest')
+}).openapi('ChatCompletionRequest', {
+  example: {
+    model: 'gemini-3-pro-preview',
+    messages: [{ role: 'user', content: 'Hello!' }],
+  },
+})
 
 const ChoiceMessageSchema = z.object({
   role: z.literal('assistant'),
@@ -118,7 +133,7 @@ export const ChatCompletionResponseSchema = z.object({
   id: z.string().openapi({ example: 'chatcmpl-abc123' }),
   object: z.literal('chat.completion'),
   created: z.number().int().openapi({ example: 1700000000 }),
-  model: z.string().openapi({ example: 'gemini-2.5-flash' }),
+  model: z.string().openapi({ example: 'gemini-3-pro-preview' }),
   choices: z.array(ChoiceSchema),
   usage: UsageSchema.optional(),
   service_tier: z.string().optional(),
@@ -158,7 +173,7 @@ export const ChatCompletionChunkSchema = z.object({
 }).openapi('ChatCompletionChunk')
 
 const ModelObjectSchema = z.object({
-  id: z.string().openapi({ example: 'gemini-2.5-flash' }),
+  id: z.string().openapi({ example: 'gemini-3-pro-preview' }),
   object: z.literal('model'),
   created: z.number().int().openapi({ example: 1700000000 }),
   owned_by: z.string().openapi({ example: 'google' }),
