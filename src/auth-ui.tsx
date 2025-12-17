@@ -185,6 +185,11 @@ const styles = `
 
 const clientScript = `
   let authUrl = '';
+  let adminKey = localStorage.getItem('adminKey') || '';
+
+  function getAuthHeaders() {
+    return adminKey ? { 'Authorization': 'Bearer ' + adminKey } : {};
+  }
 
   function formatExpiry(expiresAt) {
     if (!expiresAt) return { text: 'Unknown', class: '' };
@@ -208,9 +213,20 @@ const clientScript = `
   async function loadAccounts() {
     const listEl = document.getElementById('accountList');
     const statusEl = document.getElementById('status');
+    const mainContent = document.getElementById('mainContent');
+    const loginSection = document.getElementById('loginSection');
     
     try {
-      const res = await fetch('/admin/token/details');
+      const res = await fetch('/admin/token/details', { headers: getAuthHeaders() });
+      if (res.status === 401) {
+        mainContent.classList.add('hidden');
+        loginSection.classList.remove('hidden');
+        return;
+      }
+      
+      mainContent.classList.remove('hidden');
+      loginSection.classList.add('hidden');
+      
       if (res.ok) {
         const data = await res.json();
         
@@ -266,7 +282,10 @@ const clientScript = `
     if (!confirm('Delete account ' + email + '?')) return;
     
     try {
-      const res = await fetch('/admin/token?email=' + encodeURIComponent(email), { method: 'DELETE' });
+      const res = await fetch('/admin/token?email=' + encodeURIComponent(email), { 
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         await loadAccounts();
       } else {
@@ -284,7 +303,10 @@ const clientScript = `
     btn.textContent = 'Refreshing...';
     
     try {
-      const res = await fetch('/admin/token/refresh', { method: 'POST' });
+      const res = await fetch('/admin/token/refresh', { 
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
       const data = await res.json();
       if (res.ok) {
         alert('Refreshed ' + data.refreshed + ' token(s)');
@@ -306,7 +328,9 @@ const clientScript = `
     btn.textContent = 'Generating...';
 
     try {
-      const res = await fetch('/auth/authorize?redirectUri=http://localhost:9999/');
+      const res = await fetch('/auth/authorize?redirectUri=http://localhost:9999/', {
+        headers: getAuthHeaders()
+      });
       const data = await res.json();
       authUrl = data.url;
       
@@ -351,7 +375,7 @@ const clientScript = `
 
       const res = await fetch('/auth/callback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ code, state, redirectUri: 'http://localhost:9999/' })
       });
 
@@ -373,6 +397,21 @@ const clientScript = `
     }
   }
 
+  async function login() {
+    const keyInput = document.getElementById('adminKeyInput');
+    adminKey = keyInput.value.trim();
+    localStorage.setItem('adminKey', adminKey);
+    await loadAccounts();
+  }
+
+  function logout() {
+    adminKey = '';
+    localStorage.removeItem('adminKey');
+    document.getElementById('mainContent').classList.add('hidden');
+    document.getElementById('loginSection').classList.remove('hidden');
+    document.getElementById('adminKeyInput').value = '';
+  }
+
   loadAccounts();
 `
 
@@ -390,41 +429,53 @@ export const AuthPage: FC = () => {
           <h1>Antigravity Auth</h1>
           <p class="subtitle">Multi-account Google OAuth token management</p>
 
-          <div class="section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <div class="section-title" style="margin-bottom: 0;">Accounts</div>
-              <button class="btn-sm btn-secondary" onclick="refreshAll()">Refresh All</button>
-            </div>
-            <div id="status" class="status loading">
-              <span class="dot"></span>
-              <span>Loading...</span>
-            </div>
-            <div id="accountList" style="margin-top: 16px;"></div>
+          <div id="loginSection" class="section hidden">
+            <div class="section-title">Admin Login</div>
+            <input type="password" id="adminKeyInput" placeholder="Enter Admin Key" />
+            <button class="btn-full" style="margin-top: 12px;" onclick="login()">Login</button>
           </div>
 
-          <div class="section">
-            <div class="section-title">Add Account</div>
-            
-            <div class="step">
-              <div class="step-num">1</div>
-              <div class="step-content">
-                <p>Generate OAuth URL and open in browser</p>
-                <button id="generateBtn" class="btn-full" onclick="generateAuthUrl()">Generate Auth URL</button>
-                <div id="authUrlBox" class="url-box hidden"></div>
-                <div id="authUrlBtns" class="btn-group hidden" style="margin-top: 8px;">
-                  <button class="btn-secondary" onclick="copyAuthUrl()">Copy</button>
-                  <button onclick="openAuthUrl()">Open in Browser</button>
-                </div>
-              </div>
+          <div id="mainContent">
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+              <button class="btn-sm btn-secondary" onclick="logout()">Logout</button>
             </div>
 
-            <div class="step">
-              <div class="step-num">2</div>
-              <div class="step-content">
-                <p>Paste the localhost callback URL here</p>
-                <textarea id="callbackUrl" placeholder="http://localhost:9999/?state=...&code=..."></textarea>
-                <button class="btn-full" style="margin-top: 12px;" onclick="exchangeToken()">Add Account</button>
-                <div id="exchangeResult"></div>
+            <div class="section">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div class="section-title" style="margin-bottom: 0;">Accounts</div>
+                <button class="btn-sm btn-secondary" onclick="refreshAll()">Refresh All</button>
+              </div>
+              <div id="status" class="status loading">
+                <span class="dot"></span>
+                <span>Loading...</span>
+              </div>
+              <div id="accountList" style="margin-top: 16px;"></div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">Add Account</div>
+              
+              <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                  <p>Generate OAuth URL and open in browser</p>
+                  <button id="generateBtn" class="btn-full" onclick="generateAuthUrl()">Generate Auth URL</button>
+                  <div id="authUrlBox" class="url-box hidden"></div>
+                  <div id="authUrlBtns" class="btn-group hidden" style="margin-top: 8px;">
+                    <button class="btn-secondary" onclick="copyAuthUrl()">Copy</button>
+                    <button onclick="openAuthUrl()">Open in Browser</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                  <p>Paste the localhost callback URL here</p>
+                  <textarea id="callbackUrl" placeholder="http://localhost:9999/?state=...&code=..."></textarea>
+                  <button class="btn-full" style="margin-top: 12px;" onclick="exchangeToken()">Add Account</button>
+                  <div id="exchangeResult"></div>
+                </div>
               </div>
             </div>
           </div>
