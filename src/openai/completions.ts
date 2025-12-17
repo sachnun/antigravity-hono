@@ -9,6 +9,63 @@ import type {
   Message,
 } from './schemas'
 
+const MAX_RETRIES = 3
+const MAX_RETRY_DELAY_MS = 5000
+
+function parseRateLimitError(text: string): string | null {
+  try {
+    const data = JSON.parse(text)
+    const details = data.error?.details ?? []
+    for (const detail of details) {
+      if (detail.retryDelay) {
+        return detail.retryDelay
+      }
+    }
+    if (data.error?.quotaResetDelay) {
+      return data.error.quotaResetDelay
+    }
+  } catch {}
+  return null
+}
+
+function parseDelaySeconds(delay: string): number {
+  const match = delay.match(/^([\d.]+)s?$/)
+  return match ? parseFloat(match[1]) : 0
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit
+): Promise<Response> {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const response = await fetch(url, options)
+
+    if (response.status !== 429) {
+      return response
+    }
+
+    const errorText = await response.text()
+    const retryDelay = parseRateLimitError(errorText)
+
+    if (!retryDelay) {
+      throw new Error(`Rate limited: ${errorText}`)
+    }
+
+    const delayMs = parseDelaySeconds(retryDelay) * 1000
+
+    if (attempt < MAX_RETRIES - 1 && delayMs > 0 && delayMs <= MAX_RETRY_DELAY_MS) {
+      await sleep(delayMs)
+      continue
+    }
+
+    throw new Error(`Rate limited after ${MAX_RETRIES} retries`)
+  }
+
+  throw new Error('Rate limited after max retries')
+}
+
 const MODEL_ALIASES: Record<string, string> = {
   'gemini-3-pro-preview': 'gemini-3-pro-low',
 }
@@ -268,7 +325,7 @@ async function collectStreamingResponse(
 ): Promise<ChatCompletionResponse> {
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -281,7 +338,10 @@ async function collectStreamingResponse(
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`Antigravity API error: ${response.status} - ${errorText}`)
+    return new Response(errorText, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    }) as unknown as ChatCompletionResponse
   }
 
   const completionId = generateCompletionId()
@@ -388,7 +448,7 @@ export async function handleChatCompletion(
   request: ChatCompletionRequest,
   accessToken: string,
   projectId: string
-): Promise<ChatCompletionResponse> {
+): Promise<ChatCompletionResponse | Response> {
   const effectiveModel = resolveModelName(request.model)
   const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
   const tools = convertToolsToGemini(request.tools)
@@ -442,7 +502,7 @@ export async function handleChatCompletion(
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:generateContent`
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -454,7 +514,10 @@ export async function handleChatCompletion(
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`Antigravity API error: ${response.status} - ${errorText}`)
+    return new Response(errorText, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    }) as unknown as ChatCompletionResponse
   }
 
   const data = await response.json() as AntigravityResponse
@@ -468,7 +531,7 @@ export async function handleChatCompletionStream(
   request: ChatCompletionRequest,
   accessToken: string,
   projectId: string
-): Promise<ReadableStream<Uint8Array>> {
+): Promise<ReadableStream<Uint8Array> | Response> {
   const effectiveModel = resolveModelName(request.model)
   const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
   const tools = convertToolsToGemini(request.tools)
@@ -516,7 +579,7 @@ export async function handleChatCompletionStream(
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -529,7 +592,10 @@ export async function handleChatCompletionStream(
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`Antigravity API error: ${response.status} - ${errorText}`)
+    return new Response(errorText, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   const completionId = generateCompletionId()
