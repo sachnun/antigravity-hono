@@ -54,3 +54,7 @@ export function getModel(modelId: string) {
     owned_by: model.owned_by,
   }
 }
+
+export function isValidModel(modelId: string): boolean {
+  return AVAILABLE_MODELS.some((m) => m.id === modelId)
+}

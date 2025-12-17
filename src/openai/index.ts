@@ -1,5 +1,5 @@
 export { handleChatCompletion, handleChatCompletionStream } from './completions'
-export { listModels, getModel, AVAILABLE_MODELS } from './models'
+export { listModels, getModel, isValidModel, AVAILABLE_MODELS } from './models'
 export {
   ChatCompletionRequestSchema,
   ChatCompletionResponseSchema,

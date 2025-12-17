@@ -14,6 +14,7 @@ import {
   handleChatCompletionStream,
   listModels,
   getModel,
+  isValidModel,
   ChatCompletionRequestSchema,
   ChatCompletionResponseSchema,
   ModelsListResponseSchema,
@@ -188,6 +189,17 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
   }
 
   const body = c.req.valid('json')
+
+  if (!isValidModel(body.model)) {
+    return c.json({ 
+      error: { 
+        message: `The model '${body.model}' does not exist`,
+        type: 'invalid_request_error',
+        param: 'model',
+        code: 'model_not_found'
+      } 
+    }, 404)
+  }
 
   const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
   if (!stored) {
