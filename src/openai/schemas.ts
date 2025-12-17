@@ -49,15 +49,15 @@ export const ChatCompletionRequestSchema = z.object({
   presence_penalty: z.number().min(-2).max(2).optional().default(0),
   frequency_penalty: z.number().min(-2).max(2).optional().default(0),
   reasoning_effort: z.enum(['none', 'low', 'medium', 'high']).optional().openapi({
-    description: 'Reasoning effort level. Maps to thinkingLevel for Gemini 3, thinkingBudget for Gemini 2.5',
+    description: 'Reasoning effort level for thinking models',
     example: 'medium',
   }),
   thinking_budget: z.number().int().min(0).max(32000).optional().openapi({
-    description: 'Explicit thinking budget for Gemini 2.5 models (overrides reasoning_effort)',
+    description: 'Explicit thinking budget in tokens (overrides reasoning_effort)',
     example: 8192,
   }),
-  include_thoughts: z.boolean().optional().default(false).openapi({
-    description: 'Include thinking/reasoning tokens in response',
+  include_thoughts: z.boolean().optional().openapi({
+    description: 'Include thinking/reasoning tokens in response (defaults to true when thinking is enabled)',
     example: true,
   }),
   tools: z.array(ToolSchema).optional(),

@@ -10,32 +10,7 @@ import type {
 } from './schemas'
 
 const MODEL_ALIASES: Record<string, string> = {
-  'gemini-2.5-computer-use-preview-10-2025': 'rev19-uic3-1p',
-  'gemini-3-pro-image-preview': 'gemini-3-pro-image',
-  'gemini-3-pro-preview': 'gemini-3-pro-high',
-  'gemini-claude-sonnet-4-5': 'claude-sonnet-4-5',
-  'gemini-claude-sonnet-4-5-thinking': 'claude-sonnet-4-5-thinking',
-  'gemini-claude-sonnet-4-5-thinking-high': 'claude-sonnet-4-5-thinking',
-  'gemini-claude-sonnet-4-5-thinking-medium': 'claude-sonnet-4-5-thinking',
-  'gemini-claude-sonnet-4-5-thinking-low': 'claude-sonnet-4-5-thinking',
-  'gemini-claude-opus-4-5-thinking': 'claude-opus-4-5-thinking',
-  'gemini-claude-opus-4-5-thinking-high': 'claude-opus-4-5-thinking',
-  'gemini-claude-opus-4-5-thinking-medium': 'claude-opus-4-5-thinking',
-  'gemini-claude-opus-4-5-thinking-low': 'claude-opus-4-5-thinking',
-}
-
-const MODEL_DEFAULT_THINKING: Record<string, { level?: ThinkingLevel; budget?: number }> = {
-  'gemini-3-pro-high': { level: 'high' },
-  'gemini-3-pro-medium': { level: 'medium' },
-  'gemini-3-pro-low': { level: 'low' },
-  'gemini-claude-sonnet-4-5-thinking': { budget: 16000 },
-  'gemini-claude-sonnet-4-5-thinking-high': { budget: 32000 },
-  'gemini-claude-sonnet-4-5-thinking-medium': { budget: 16000 },
-  'gemini-claude-sonnet-4-5-thinking-low': { budget: 4000 },
-  'gemini-claude-opus-4-5-thinking': { budget: 16000 },
-  'gemini-claude-opus-4-5-thinking-high': { budget: 32000 },
-  'gemini-claude-opus-4-5-thinking-medium': { budget: 16000 },
-  'gemini-claude-opus-4-5-thinking-low': { budget: 4000 },
+  'gemini-3-pro-preview': 'gemini-3-pro-low',
 }
 
 function resolveModelName(model: string): string {
@@ -74,20 +49,17 @@ function isGemini25Model(model: string): boolean {
   return model.includes('gemini-2.5') || model.includes('gemini-2')
 }
 
-function isClaudeThinkingModel(model: string): boolean {
-  return model.includes('claude') && model.includes('thinking')
+function isClaudeModel(model: string): boolean {
+  return model.includes('claude')
 }
 
 function buildThinkingConfig(
-  originalModel: string,
   effectiveModel: string,
   reasoningEffort?: ReasoningEffort,
   thinkingBudget?: number,
   includeThoughts?: boolean
 ): ThinkingConfig | undefined {
-  const modelDefaults = MODEL_DEFAULT_THINKING[originalModel]
-
-  if (reasoningEffort === 'none' && !thinkingBudget && !modelDefaults) {
+  if (reasoningEffort === 'none' && !thinkingBudget) {
     return undefined
   }
 
@@ -98,28 +70,20 @@ function buildThinkingConfig(
       config.thinkingBudget = thinkingBudget
     } else if (reasoningEffort && reasoningEffort !== 'none') {
       config.thinkingLevel = reasoningEffort as ThinkingLevel
-    } else if (modelDefaults?.level) {
-      config.thinkingLevel = modelDefaults.level
     }
-  } else if (isGemini25Model(effectiveModel) || isClaudeThinkingModel(effectiveModel)) {
+  } else if (isGemini25Model(effectiveModel) || isClaudeModel(effectiveModel)) {
     if (thinkingBudget !== undefined) {
       config.thinkingBudget = thinkingBudget
     } else if (reasoningEffort && reasoningEffort !== 'none') {
       config.thinkingBudget = THINKING_BUDGET_MAP[reasoningEffort]
-    } else if (modelDefaults?.budget) {
-      config.thinkingBudget = modelDefaults.budget
     }
-  }
-
-  if (includeThoughts !== undefined) {
-    config.includeThoughts = includeThoughts
-  } else if (modelDefaults) {
-    config.includeThoughts = true
   }
 
   if (Object.keys(config).length === 0) {
     return undefined
   }
+
+  config.includeThoughts = includeThoughts ?? true
 
   return config
 }
@@ -439,7 +403,6 @@ export async function handleChatCompletion(
   }
 
   const thinkingConfig = buildThinkingConfig(
-    request.model,
     effectiveModel,
     request.reasoning_effort,
     request.thinking_budget,
@@ -447,7 +410,7 @@ export async function handleChatCompletion(
   )
   if (thinkingConfig) {
     generationConfig.thinkingConfig = thinkingConfig
-    if (thinkingConfig.thinkingBudget && isClaudeThinkingModel(effectiveModel)) {
+    if (thinkingConfig.thinkingBudget && isClaudeModel(effectiveModel)) {
       const currentMax = (generationConfig.maxOutputTokens as number | undefined) ?? 8192
       const requiredMax = thinkingConfig.thinkingBudget + 4096
       if (currentMax <= thinkingConfig.thinkingBudget) {
@@ -473,7 +436,7 @@ export async function handleChatCompletion(
 
   const shouldIncludeThoughts = request.include_thoughts ?? thinkingConfig?.includeThoughts ?? false
   
-  if (isClaudeThinkingModel(effectiveModel) && shouldIncludeThoughts) {
+  if (isClaudeModel(effectiveModel) && shouldIncludeThoughts) {
     return collectStreamingResponse(wrappedBody, accessToken, request.model, shouldIncludeThoughts)
   }
 
@@ -520,7 +483,6 @@ export async function handleChatCompletionStream(
   }
 
   const thinkingConfig = buildThinkingConfig(
-    request.model,
     effectiveModel,
     request.reasoning_effort,
     request.thinking_budget,
@@ -528,7 +490,7 @@ export async function handleChatCompletionStream(
   )
   if (thinkingConfig) {
     generationConfig.thinkingConfig = thinkingConfig
-    if (thinkingConfig.thinkingBudget && isClaudeThinkingModel(effectiveModel)) {
+    if (thinkingConfig.thinkingBudget && isClaudeModel(effectiveModel)) {
       const currentMax = (generationConfig.maxOutputTokens as number | undefined) ?? 8192
       const requiredMax = thinkingConfig.thinkingBudget + 4096
       if (currentMax <= thinkingConfig.thinkingBudget) {
