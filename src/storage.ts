@@ -16,13 +16,26 @@ export interface StoredToken {
 export type ModelFamily = 'gemini' | 'claude'
 
 const TOKENS_KEY = 'tokens'
+const CACHE_TTL_MS = 30 * 1000
+
+let cachedTokens: StoredToken[] | null = null
+let cacheTimestamp = 0
 
 export async function getAllTokens(kv: KVNamespace): Promise<StoredToken[]> {
+  const now = Date.now()
+  if (cachedTokens && now - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedTokens
+  }
+  
   const data = await kv.get(TOKENS_KEY, 'json')
-  return (data as StoredToken[]) ?? []
+  cachedTokens = (data as StoredToken[]) ?? []
+  cacheTimestamp = now
+  return cachedTokens
 }
 
 export async function setAllTokens(kv: KVNamespace, tokens: StoredToken[]): Promise<void> {
+  cachedTokens = tokens
+  cacheTimestamp = Date.now()
   await kv.put(TOKENS_KEY, JSON.stringify(tokens))
 }
 
