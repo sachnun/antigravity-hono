@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "antigravity-hono",
+  "main": "src/index.tsx",
+  "compatibility_date": "2025-12-17",
+  "kv_namespaces": [
+    {
+      "binding": "ANTIGRAVITY_AUTH",
+      "id": "5cd3cc8be4224d908a3f5804e700ec36"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  }
+}
