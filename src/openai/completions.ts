@@ -68,6 +68,7 @@ async function fetchWithRetry(
 
 const MODEL_ALIASES: Record<string, string> = {
   'gemini-3-pro-preview': 'gemini-3-pro-low',
+  'claude-opus-4-5': 'claude-opus-4-5-thinking',
 }
 
 function resolveModelName(model: string): string {
