@@ -24,6 +24,7 @@ import { AuthPage } from './auth-ui'
 type Bindings = {
   ANTIGRAVITY_AUTH: KVNamespace
   ADMIN_KEY?: string
+  API_KEY?: string
 }
 
 const app = new OpenAPIHono<{ Bindings: Bindings }>()
@@ -75,6 +76,12 @@ app.openapi(searchRoute, async (c) => {
   return c.json(result, 200)
 })
 
+app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'API Key for chat completions',
+})
+
 app.doc('/doc', {
   openapi: '3.0.0',
   info: {
@@ -94,8 +101,63 @@ const chatCompletionsRoute = createRoute({
   tags: ['OpenAI Compatible'],
   summary: 'Create chat completion',
   description: 'Creates a model response for the given chat conversation. Compatible with OpenAI API format.',
+  security: [{ bearerAuth: [] }],
   request: {
-    body: { content: { 'application/json': { schema: ChatCompletionRequestSchema } } },
+    body: {
+      content: {
+        'application/json': {
+          schema: ChatCompletionRequestSchema,
+          examples: {
+            basic: {
+              summary: 'Basic',
+              value: {
+                model: 'gemini-3-pro-preview',
+                messages: [{ role: 'user', content: 'Hello!' }],
+              },
+            },
+            streaming: {
+              summary: 'Streaming',
+              value: {
+                model: 'gemini-3-pro-preview',
+                messages: [{ role: 'user', content: 'Hello!' }],
+                stream: true,
+              },
+            },
+            thinking: {
+              summary: 'Thinking',
+              value: {
+                model: 'gemini-3-pro-preview',
+                messages: [{ role: 'user', content: 'What is 25 * 37?' }],
+                reasoning_effort: 'medium',
+                include_thoughts: true,
+              },
+            },
+            tools: {
+              summary: 'Tools',
+              value: {
+                model: 'gemini-3-pro-preview',
+                messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
+                tools: [{
+                  type: 'function',
+                  function: {
+                    name: 'get_weather',
+                    description: 'Get weather in a location',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        location: { type: 'string' },
+                      },
+                      required: ['location'],
+                    },
+                  },
+                }],
+                tool_choice: 'auto',
+              },
+            },
+          },
+        },
+      },
+    },
   },
   responses: {
     200: {
@@ -117,29 +179,28 @@ const chatCompletionsRoute = createRoute({
 })
 
 app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
-  let accessToken: string
-  let projectId: string
-  let tokenEmail: string | undefined
+  const apiKey = c.env.API_KEY
+  if (apiKey) {
+    const authHeader = c.req.header('Authorization')
+    if (authHeader !== `Bearer ${apiKey}`) {
+      return c.json({ error: 'Invalid API key' }, 401)
+    }
+  }
 
-  const authHeader = c.req.header('Authorization')
   const body = c.req.valid('json')
 
-  if (authHeader?.startsWith('Bearer ')) {
-    accessToken = authHeader.slice(7)
-    projectId = c.req.header('X-Project-ID') ?? ''
-  } else {
-    const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
-    if (!stored) {
-      return c.json({ error: 'No valid token available', details: 'Set up token via /auth or provide Authorization header' }, 401)
-    }
-    accessToken = stored.accessToken
-    projectId = stored.projectId
-    tokenEmail = stored.email
+  const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
+  if (!stored) {
+    return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
   }
+  const accessToken = stored.accessToken
+  const projectId = stored.projectId
+  const tokenEmail = stored.email
 
   try {
     if (body.stream) {
       const stream = await handleChatCompletionStream(body, accessToken, projectId)
+      if (stream instanceof Response) return stream
       return new Response(stream, {
         headers: {
           'Content-Type': 'text/event-stream',
@@ -150,6 +211,7 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
     }
 
     const result = await handleChatCompletion(body, accessToken, projectId)
+    if (result instanceof Response) return result
     return c.json(result, 200)
   } catch (e) {
     if (e instanceof Error && e.message.includes('429') && tokenEmail) {
