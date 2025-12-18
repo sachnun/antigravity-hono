@@ -73,7 +73,7 @@ const clientScript = `
               <div class="flex justify-between items-center mb-3">
                 <span class="font-semibold text-white text-sm">\${token.email}</span>
                 <div class="flex gap-2">
-                  \${token.tier ? '<span class="px-2 py-0.5 rounded text-xs font-semibold ' + (token.tier === 'standard-tier' ? 'bg-green-600 text-white' : token.tier === 'free-tier' ? 'bg-blue-600 text-white' : 'bg-neutral-600 text-white') + '">' + (token.tier === 'standard-tier' ? 'PRO' : token.tier === 'free-tier' ? 'FREE' : token.tier.toUpperCase()) + '</span>' : ''}
+                  \${token.tier && token.tier !== 'unknown' ? '<span class="px-2 py-0.5 rounded text-xs font-semibold ' + (token.tier.includes('pro') || token.tier === 'standard-tier' ? 'bg-green-600 text-white' : token.tier === 'free-tier' ? 'bg-blue-600 text-white' : 'bg-neutral-600 text-white') + '">' + (token.tier.includes('pro') || token.tier === 'standard-tier' ? 'PRO' : token.tier === 'free-tier' ? 'FREE' : token.tier.toUpperCase()) + '</span>' : ''}
                   \${hasRL ? '<span class="bg-amber-500 text-black px-2 py-0.5 rounded text-xs font-semibold">RATE LIMITED</span>' : ''}
                 </div>
               </div>

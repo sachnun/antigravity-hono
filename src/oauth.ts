@@ -111,9 +111,22 @@ export async function fetchProjectInfo(accessToken: string): Promise<ProjectInfo
     }
 
     let tier = 'unknown'
-    const currentTier = data.currentTier as Record<string, unknown> | undefined
-    if (currentTier && typeof currentTier.id === 'string') {
-      tier = currentTier.id
+    const paidTier = data.paidTier as Record<string, unknown> | undefined
+    if (paidTier && typeof paidTier.id === 'string') {
+      tier = paidTier.id
+    } else {
+      const currentTier = data.currentTier as Record<string, unknown> | undefined
+      if (currentTier && typeof currentTier.id === 'string') {
+        tier = currentTier.id
+      } else {
+        const allowedTiers = data.allowedTiers as Array<Record<string, unknown>> | undefined
+        if (allowedTiers) {
+          const defaultTier = allowedTiers.find(t => t.isDefault === true)
+          if (defaultTier && typeof defaultTier.id === 'string') {
+            tier = defaultTier.id
+          }
+        }
+      }
     }
 
     if (projectId) {
