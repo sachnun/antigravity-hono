@@ -1,21 +1,28 @@
-```txt
-npm install
-npm run dev
+# Antigravity Hono
+
+OpenAI and Anthropic compatible API proxy powered by Google Antigravity.
+
+## Setup
+
+```sh
+bun install
+bun run dev
 ```
 
-```txt
-npm run deploy
+## Deploy
+
+```sh
+bun run deploy
 ```
 
-[For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
+## Endpoints
 
-```txt
-npm run cf-typegen
-```
+- `POST /v1/chat/completions` - OpenAI compatible
+- `POST /v1/messages` - Anthropic compatible
+- `GET /v1/models` - List models
+- `GET /auth` - Auth UI
 
-Pass the `CloudflareBindings` as generics when instantiation `Hono`:
+## Environment Variables
 
-```ts
-// src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
-```
+- `ADMIN_KEY` - Admin API key for token management
+- `API_KEY` - API key for chat completions
