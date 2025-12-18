@@ -1,6 +1,6 @@
-export const ANTIGRAVITY_CLIENT_ID = '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com'
-export const ANTIGRAVITY_CLIENT_SECRET = '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'
-export const ANTIGRAVITY_REDIRECT_URI = 'http://localhost:36742/oauth-callback'
+export const DEFAULT_OAUTH_CLIENT_ID = '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com'
+export const DEFAULT_OAUTH_CLIENT_SECRET = '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'
+export const DEFAULT_REDIRECT_URI = 'http://localhost:36742/oauth-callback'
 
 export const ANTIGRAVITY_SCOPES = [
   'https://www.googleapis.com/auth/cloud-platform',
@@ -72,3 +72,17 @@ export const MODEL_TO_GROUP: Record<string, string> = Object.entries(QUOTA_GROUP
   },
   {} as Record<string, string>
 )
+
+export const MODEL_ALIASES: Record<string, string> = {
+  'gemini-3-pro-preview': 'gemini-3-pro-low',
+  'claude-opus-4-5': 'claude-opus-4-5-thinking',
+  'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5',
+  'claude-4-sonnet': 'claude-sonnet-4-5',
+  'claude-opus-4-5-20251101': 'claude-opus-4-5',
+  'claude-4-opus': 'claude-opus-4-5',
+}
+
+export const INTERNAL_MODEL_MAP: Record<string, string> = {
+  'claude-sonnet-4-5': 'claude-sonnet-4-5',
+  'claude-opus-4-5': 'claude-opus-4-5-thinking',
+}
