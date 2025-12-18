@@ -327,12 +327,5 @@ export async function getAccountQuotaInfo(
 
 export async function getAllAccountsQuota(kv: KVNamespace): Promise<AccountQuotaInfo[]> {
   const tokens = await getAllTokens(kv)
-  const results: AccountQuotaInfo[] = []
-
-  for (const token of tokens) {
-    const quota = await getAccountQuotaInfo(kv, token)
-    results.push(quota)
-  }
-
-  return results
+  return Promise.all(tokens.map(token => getAccountQuotaInfo(kv, token)))
 }
