@@ -293,6 +293,7 @@ const clientScript = `
   }
 
   loadAccounts();
+  setInterval(loadAccounts, 10000);
 `
 
 export const AuthPage: FC = () => {
