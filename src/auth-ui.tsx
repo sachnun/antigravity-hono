@@ -273,8 +273,12 @@ const clientScript = `
     const loginSection = document.getElementById('loginSection');
     
     try {
-      const res = await fetch('/admin/token/details', { headers: getAuthHeaders() });
-      if (res.status === 401) {
+      const [tokenRes, quotaRes] = await Promise.all([
+        fetch('/admin/token/details', { headers: getAuthHeaders() }),
+        fetch('/admin/quota', { headers: getAuthHeaders() })
+      ]);
+      
+      if (tokenRes.status === 401) {
         mainContent.classList.add('hidden');
         loginSection.classList.remove('hidden');
         return;
@@ -283,18 +287,25 @@ const clientScript = `
       mainContent.classList.remove('hidden');
       loginSection.classList.add('hidden');
       
-      if (res.ok) {
-        const data = await res.json();
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        const quotaData = quotaRes.ok ? await quotaRes.json() : { quotas: [] };
+        
+        const quotaByEmail = {};
+        for (const q of quotaData.quotas || []) {
+          quotaByEmail[q.email] = q;
+        }
         
         statusEl.className = 'status valid';
-        statusEl.innerHTML = '<span class="dot"></span><span>' + data.tokens.length + ' account(s) configured</span>';
+        statusEl.innerHTML = '<span class="dot"></span><span>' + tokenData.tokens.length + ' account(s) configured</span>';
         
         let html = '';
-        for (const token of data.tokens) {
+        for (const token of tokenData.tokens) {
           const expiry = formatExpiry(token.expiresAt);
           const geminiRL = token.rateLimitUntil?.gemini;
           const claudeRL = token.rateLimitUntil?.claude;
           const hasRL = (geminiRL && Date.now() < geminiRL) || (claudeRL && Date.now() < claudeRL);
+          const quota = quotaByEmail[token.email];
           
           html += \`
             <div class="account-card \${hasRL ? 'rate-limited' : ''}">
@@ -315,6 +326,32 @@ const clientScript = `
                 </div>
                 \${token.lastUsed ? '<div class="account-row"><span>Last Used</span><span>' + new Date(token.lastUsed).toLocaleTimeString() + '</span></div>' : ''}
               </div>
+          \`;
+          
+          if (quota && quota.status === 'success' && quota.groups) {
+            html += '<div class="quota-section">';
+            for (const group of quota.groups) {
+              const pct = group.remainingFraction !== null ? Math.round(group.remainingFraction * 100) : 0;
+              const cls = getQuotaClass(group.remainingFraction);
+              const resetText = group.resetTimestamp ? formatRelativeTime(group.resetTimestamp) : null;
+              
+              html += '<div class="quota-group">';
+              html += '<div class="quota-header">';
+              html += '<span class="quota-name">' + group.displayName + '</span>';
+              html += '<span class="quota-value">' + pct + '%</span>';
+              html += '</div>';
+              html += '<div class="quota-bar"><div class="quota-fill ' + cls + '" style="width: ' + pct + '%;"></div></div>';
+              if (resetText) {
+                html += '<div class="quota-reset">Reset: ' + resetText + '</div>';
+              }
+              html += '</div>';
+            }
+            html += '</div>';
+          } else if (quota && quota.status === 'error') {
+            html += '<div class="quota-error" style="margin-top: 12px;">' + (quota.error || 'Failed to fetch quota') + '</div>';
+          }
+          
+          html += \`
               <div class="account-actions">
                 <button class="btn-sm btn-danger" onclick="deleteAccount('\${token.email}')">Delete</button>
               </div>
@@ -490,72 +527,7 @@ const clientScript = `
     return 'high';
   }
 
-  async function loadQuota() {
-    const quotaContainer = document.getElementById('quotaContainer');
-    if (!quotaContainer) return;
-    
-    quotaContainer.innerHTML = '<div class="quota-loading">Loading quota...</div>';
-    
-    try {
-      const res = await fetch('/admin/quota', { headers: getAuthHeaders() });
-      if (!res.ok) {
-        quotaContainer.innerHTML = '<div class="quota-error">Failed to load quota</div>';
-        return;
-      }
-      
-      const data = await res.json();
-      let html = '';
-      
-      for (const account of data.quotas) {
-        html += '<div class="account-card">';
-        html += '<div class="account-header"><span class="account-email">' + account.email + '</span></div>';
-        
-        if (account.status === 'error') {
-          html += '<div class="quota-error">' + (account.error || 'Failed to fetch quota') + '</div>';
-        } else {
-          html += '<div class="quota-section">';
-          for (const group of account.groups) {
-            const pct = group.remainingFraction !== null ? Math.round(group.remainingFraction * 100) : 0;
-            const cls = getQuotaClass(group.remainingFraction);
-            const resetText = group.resetTimestamp ? formatRelativeTime(group.resetTimestamp) : null;
-            
-            html += '<div class="quota-group">';
-            html += '<div class="quota-header">';
-            html += '<span class="quota-name">' + group.displayName + '</span>';
-            html += '<span class="quota-value">' + pct + '%</span>';
-            html += '</div>';
-            html += '<div class="quota-bar"><div class="quota-fill ' + cls + '" style="width: ' + pct + '%;"></div></div>';
-            if (resetText) {
-              html += '<div class="quota-reset">Reset: ' + resetText + '</div>';
-            }
-            html += '</div>';
-          }
-          html += '</div>';
-        }
-        html += '</div>';
-      }
-      
-      if (data.quotas.length === 0) {
-        html = '<div class="empty-state">No accounts to show quota for</div>';
-      }
-      
-      quotaContainer.innerHTML = html;
-    } catch (e) {
-      quotaContainer.innerHTML = '<div class="quota-error">Error: ' + e.message + '</div>';
-    }
-  }
-
-  async function refreshQuota() {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = 'Refreshing...';
-    await loadQuota();
-    btn.disabled = false;
-    btn.textContent = 'Refresh';
-  }
-
   loadAccounts();
-  loadQuota();
 `
 
 export const AuthPage: FC = () => {
@@ -593,14 +565,6 @@ export const AuthPage: FC = () => {
                 <span>Loading...</span>
               </div>
               <div id="accountList" style="margin-top: 16px;"></div>
-            </div>
-
-            <div class="section">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <div class="section-title" style="margin-bottom: 0;">Quota Status</div>
-                <button class="btn-sm btn-secondary" onclick="refreshQuota()">Refresh</button>
-              </div>
-              <div id="quotaContainer"></div>
             </div>
 
             <div class="section">
