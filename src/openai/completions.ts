@@ -507,6 +507,10 @@ function convertGeminiToOpenAI(
   let finishReason = finishReasonMap[candidate?.finishReason ?? ''] ?? 'stop'
   if (toolCalls.length > 0) finishReason = 'tool_calls'
 
+  if (includeThoughts && !reasoningContent) {
+    reasoningContent = '...'
+  }
+
   const usage = response?.usageMetadata
   return {
     id: completionId,
@@ -641,6 +645,10 @@ async function collectStreamingResponse(
     }
   }
 
+  if (includeThoughts && !reasoningContent) {
+    reasoningContent = '...'
+  }
+
   return {
     id: completionId,
     object: 'chat.completion',
@@ -651,7 +659,7 @@ async function collectStreamingResponse(
       message: {
         role: 'assistant',
         content: content || null,
-        reasoning_content: includeThoughts && reasoningContent ? reasoningContent : undefined,
+        reasoning_content: includeThoughts ? reasoningContent : undefined,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         refusal: null,
       },
