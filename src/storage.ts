@@ -83,7 +83,11 @@ export async function getAllTokens(db: D1Database): Promise<StoredToken[]> {
   return cachedTokens
 }
 
-export async function getTokenForModel(db: D1Database, model: string): Promise<StoredToken | null> {
+export async function getTokenForModel(
+  db: D1Database,
+  model: string,
+  excludeEmails: string[] = []
+): Promise<StoredToken | null> {
   const d1 = drizzle(db)
   const now = Date.now()
   const family = getModelFamily(model)
@@ -95,15 +99,17 @@ export async function getTokenForModel(db: D1Database, model: string): Promise<S
     .from(tokens)
     .where(or(isNull(rateLimitColumn), lt(rateLimitColumn, now)))
 
-  if (available.length > 0) {
-    const selected = available[Math.floor(Math.random() * available.length)]
+  const filteredAvailable = available.filter(t => !excludeEmails.includes(t.email))
+  if (filteredAvailable.length > 0) {
+    const selected = filteredAvailable[Math.floor(Math.random() * filteredAvailable.length)]
     return tokenFromRow(selected)
   }
 
   const all = await d1.select().from(tokens)
-  if (all.length === 0) return null
+  const filteredAll = all.filter(t => !excludeEmails.includes(t.email))
+  if (filteredAll.length === 0) return null
 
-  const selected = all[Math.floor(Math.random() * all.length)]
+  const selected = filteredAll[Math.floor(Math.random() * filteredAll.length)]
   return tokenFromRow(selected)
 }
 
@@ -165,9 +171,10 @@ export async function deleteStoredToken(db: D1Database, email: string): Promise<
 
 export async function getValidAccessToken(
   db: D1Database,
-  model: string
+  model: string,
+  excludeEmails: string[] = []
 ): Promise<{ accessToken: string; projectId: string; email: string } | null> {
-  const stored = await getTokenForModel(db, model)
+  const stored = await getTokenForModel(db, model, excludeEmails)
   if (!stored) return null
 
   const bufferMs = 5 * 60 * 1000
@@ -179,6 +186,24 @@ export async function getValidAccessToken(
   return refreshed
     ? { accessToken: refreshed.accessToken, projectId: refreshed.projectId, email: refreshed.email }
     : null
+}
+
+export function parseRateLimitDelay(errorText: string): number | null {
+  try {
+    const data = JSON.parse(errorText)
+    const details = data.error?.details ?? []
+    for (const detail of details) {
+      if (detail.retryDelay) {
+        const match = detail.retryDelay.match(/^([\d.]+)s?$/)
+        if (match) return parseFloat(match[1]) * 1000
+      }
+    }
+    if (data.error?.quotaResetDelay) {
+      const match = data.error.quotaResetDelay.match(/^([\d.]+)s?$/)
+      if (match) return parseFloat(match[1]) * 1000
+    }
+  } catch {}
+  return null
 }
 
 export async function refreshAndStore(db: D1Database, stored: StoredToken): Promise<StoredToken | null> {
