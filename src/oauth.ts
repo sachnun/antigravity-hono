@@ -1,8 +1,5 @@
 import {
-  ANTIGRAVITY_CLIENT_ID,
-  ANTIGRAVITY_CLIENT_SECRET,
-  ANTIGRAVITY_REDIRECT_URI,
-  ANTIGRAVITY_SCOPES,
+  DEFAULT_REDIRECT_URI,
   CODE_ASSIST_ENDPOINT_FALLBACKS,
   CODE_ASSIST_HEADERS,
 } from './constants'
@@ -42,21 +39,35 @@ function decodeState(state: string): { verifier: string; projectId: string } {
   }
 }
 
+export interface OAuthCredentials {
+  clientId: string
+  clientSecret: string
+}
+
 export interface AuthorizeResult {
   url: string
   verifier: string
   state: string
 }
 
-export async function authorizeAntigravity(redirectUri?: string): Promise<AuthorizeResult> {
+export async function authorizeAntigravity(
+  credentials: OAuthCredentials,
+  redirectUri?: string
+): Promise<AuthorizeResult> {
   const pkce = await generatePKCE()
   const state = encodeState({ verifier: pkce.verifier, projectId: '' })
   
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
-  url.searchParams.set('client_id', ANTIGRAVITY_CLIENT_ID)
+  url.searchParams.set('client_id', credentials.clientId)
   url.searchParams.set('response_type', 'code')
-  url.searchParams.set('redirect_uri', redirectUri ?? ANTIGRAVITY_REDIRECT_URI)
-  url.searchParams.set('scope', ANTIGRAVITY_SCOPES.join(' '))
+  url.searchParams.set('redirect_uri', redirectUri ?? DEFAULT_REDIRECT_URI)
+  url.searchParams.set('scope', [
+    'https://www.googleapis.com/auth/cloud-platform',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/cclog',
+    'https://www.googleapis.com/auth/experimentsandconfigs',
+  ].join(' '))
   url.searchParams.set('code_challenge', pkce.challenge)
   url.searchParams.set('code_challenge_method', 'S256')
   url.searchParams.set('state', state)
@@ -152,6 +163,7 @@ export interface ExchangeResult {
 }
 
 export async function exchangeAntigravity(
+  credentials: OAuthCredentials,
   code: string,
   state: string,
   redirectUri?: string
@@ -162,11 +174,11 @@ export async function exchangeAntigravity(
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: ANTIGRAVITY_CLIENT_ID,
-      client_secret: ANTIGRAVITY_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: redirectUri ?? ANTIGRAVITY_REDIRECT_URI,
+      redirect_uri: redirectUri ?? DEFAULT_REDIRECT_URI,
       code_verifier: verifier,
     }),
   })
@@ -209,15 +221,18 @@ export interface RefreshResult {
   refreshToken?: string
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> {
+export async function refreshAccessToken(
+  credentials: OAuthCredentials,
+  refreshToken: string
+): Promise<RefreshResult> {
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: ANTIGRAVITY_CLIENT_ID,
-      client_secret: ANTIGRAVITY_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
     }),
   })
 
