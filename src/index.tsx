@@ -122,49 +122,93 @@ const chatCompletionsRoute = createRoute({
           schema: ChatCompletionRequestSchema,
           examples: {
             basic: {
-              summary: 'Basic',
+              summary: 'Basic message',
               value: {
-                model: 'gemini-3-pro-preview',
+                model: 'claude-opus-4-5',
                 messages: [{ role: 'user', content: 'Hello!' }],
               },
             },
-            streaming: {
-              summary: 'Streaming',
+            withSystem: {
+              summary: 'With system prompt',
               value: {
-                model: 'gemini-3-pro-preview',
-                messages: [{ role: 'user', content: 'Hello!' }],
+                model: 'claude-opus-4-5',
+                messages: [
+                  { role: 'system', content: 'You are a helpful assistant that speaks like a pirate.' },
+                  { role: 'user', content: 'Tell me about the ocean.' },
+                ],
+              },
+            },
+            streaming: {
+              summary: 'Streaming response',
+              value: {
+                model: 'claude-opus-4-5',
+                messages: [{ role: 'user', content: 'Write a short poem about coding.' }],
                 stream: true,
               },
             },
             thinking: {
-              summary: 'Thinking',
+              summary: 'With extended thinking',
               value: {
-                model: 'gemini-3-pro-preview',
-                messages: [{ role: 'user', content: 'What is 25 * 37?' }],
-                reasoning_effort: 'medium',
+                model: 'claude-opus-4-5',
+                messages: [{ role: 'user', content: 'Solve step by step: What is 847 * 239?' }],
+                reasoning_effort: 'high',
                 include_thoughts: true,
               },
             },
-            tools: {
-              summary: 'Tools',
+            multiTurn: {
+              summary: 'Multi-turn conversation',
               value: {
-                model: 'gemini-3-pro-preview',
+                model: 'claude-opus-4-5',
+                messages: [
+                  { role: 'user', content: 'My name is Alice.' },
+                  { role: 'assistant', content: 'Hello Alice! Nice to meet you.' },
+                  { role: 'user', content: 'What is my name?' },
+                ],
+              },
+            },
+            tools: {
+              summary: 'With tool/function calling',
+              value: {
+                model: 'claude-opus-4-5',
                 messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
                 tools: [{
                   type: 'function',
                   function: {
                     name: 'get_weather',
-                    description: 'Get weather in a location',
+                    description: 'Get the current weather in a given location',
                     parameters: {
                       type: 'object',
                       properties: {
-                        location: { type: 'string' },
+                        location: { type: 'string', description: 'City name' },
                       },
                       required: ['location'],
                     },
                   },
                 }],
                 tool_choice: 'auto',
+              },
+            },
+            withImage: {
+              summary: 'With image (base64)',
+              value: {
+                model: 'claude-opus-4-5',
+                messages: [{
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'image_url',
+                      image_url: { url: 'data:image/png;base64,<base64-encoded-image-data>' },
+                    },
+                    { type: 'text', text: 'What is in this image?' },
+                  ],
+                }],
+              },
+            },
+            geminiFlash: {
+              summary: 'Using Gemini Flash',
+              value: {
+                model: 'gemini-2.5-flash',
+                messages: [{ role: 'user', content: 'Hello!' }],
               },
             },
           },
@@ -327,13 +371,87 @@ const anthropicMessagesRoute = createRoute({
                 messages: [{ role: 'user', content: 'Hello!' }],
               },
             },
-            thinking: {
-              summary: 'With thinking',
+            withSystem: {
+              summary: 'With system prompt',
               value: {
                 model: 'claude-sonnet-4-5',
-                max_tokens: 8192,
-                messages: [{ role: 'user', content: 'What is 25 * 37?' }],
-                thinking: { type: 'enabled', budget_tokens: 4096 },
+                max_tokens: 1024,
+                system: 'You are a helpful assistant that speaks like a pirate.',
+                messages: [{ role: 'user', content: 'Tell me about the ocean.' }],
+              },
+            },
+            thinking: {
+              summary: 'With extended thinking',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 16384,
+                messages: [{ role: 'user', content: 'Solve step by step: What is 847 * 239?' }],
+                thinking: { type: 'enabled', budget_tokens: 8192 },
+              },
+            },
+            streaming: {
+              summary: 'Streaming response',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                stream: true,
+                messages: [{ role: 'user', content: 'Write a short poem about coding.' }],
+              },
+            },
+            multiTurn: {
+              summary: 'Multi-turn conversation',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [
+                  { role: 'user', content: 'My name is Alice.' },
+                  { role: 'assistant', content: 'Hello Alice! Nice to meet you.' },
+                  { role: 'user', content: 'What is my name?' },
+                ],
+              },
+            },
+            withTools: {
+              summary: 'With tool use',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
+                tools: [
+                  {
+                    name: 'get_weather',
+                    description: 'Get the current weather in a given location',
+                    input_schema: {
+                      type: 'object',
+                      properties: {
+                        location: { type: 'string', description: 'City name' },
+                      },
+                      required: ['location'],
+                    },
+                  },
+                ],
+              },
+            },
+            withImage: {
+              summary: 'With image (base64)',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      {
+                        type: 'image',
+                        source: {
+                          type: 'base64',
+                          media_type: 'image/png',
+                          data: '<base64-encoded-image-data>',
+                        },
+                      },
+                      { type: 'text', text: 'What is in this image?' },
+                    ],
+                  },
+                ],
               },
             },
           },
