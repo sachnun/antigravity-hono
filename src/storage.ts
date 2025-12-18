@@ -1,13 +1,20 @@
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, or, lt, isNull } from 'drizzle-orm'
 import { tokens, type Token } from './db/schema'
-import { refreshAccessToken } from './oauth'
+import { refreshAccessToken, type OAuthCredentials } from './oauth'
 import {
   CODE_ASSIST_ENDPOINT,
   CODE_ASSIST_HEADERS,
   QUOTA_GROUPS,
   GROUP_DISPLAY_NAMES,
+  DEFAULT_OAUTH_CLIENT_ID,
+  DEFAULT_OAUTH_CLIENT_SECRET,
 } from './constants'
+
+const DEFAULT_CREDENTIALS: OAuthCredentials = {
+  clientId: DEFAULT_OAUTH_CLIENT_ID,
+  clientSecret: DEFAULT_OAUTH_CLIENT_SECRET,
+}
 
 const CACHE_TTL_MS = 30 * 1000
 let cachedTokens: StoredToken[] | null = null
@@ -182,7 +189,7 @@ export async function getValidAccessToken(
 }
 
 export async function refreshAndStore(db: D1Database, stored: StoredToken): Promise<StoredToken | null> {
-  const result = await refreshAccessToken(stored.refreshToken)
+  const result = await refreshAccessToken(DEFAULT_CREDENTIALS, stored.refreshToken)
 
   const updated: StoredToken = {
     accessToken: result.accessToken,
