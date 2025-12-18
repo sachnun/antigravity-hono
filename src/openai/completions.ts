@@ -148,7 +148,13 @@ function buildThinkingConfig(
 
 interface GeminiContent {
   role: string
-  parts: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown } }>
+  parts: Array<{ 
+    text?: string
+    thought?: boolean
+    thoughtSignature?: string
+    functionCall?: { name: string; args: Record<string, unknown>; id?: string }
+    functionResponse?: { name: string; response: unknown; id?: string }
+  }>
 }
 
 interface GeminiTool {
@@ -159,9 +165,82 @@ interface GeminiTool {
   }>
 }
 
-function convertMessagesToGemini(messages: Message[]): { contents: GeminiContent[]; systemInstruction?: { parts: Array<{ text: string }> } } {
+function isInToolLoop(contents: GeminiContent[]): boolean {
+  if (contents.length === 0) return false
+  const lastMsg = contents[contents.length - 1]
+  if (lastMsg.role !== 'user') return false
+  return lastMsg.parts.some(p => p.functionResponse !== undefined)
+}
+
+function hasTurnStartThinking(contents: GeminiContent[]): boolean {
+  let lastRealUserIdx = -1
+  for (let i = 0; i < contents.length; i++) {
+    const msg = contents[i]
+    if (msg.role === 'user') {
+      const isToolResult = msg.parts.some(p => p.functionResponse !== undefined)
+      if (!isToolResult) lastRealUserIdx = i
+    }
+  }
+  
+  for (let i = lastRealUserIdx + 1; i < contents.length; i++) {
+    if (contents[i].role === 'model') {
+      return contents[i].parts.some(p => p.thought === true)
+    }
+  }
+  return false
+}
+
+function sanitizeThinkingForClaude(contents: GeminiContent[], thinkingEnabled: boolean): GeminiContent[] {
+  if (!thinkingEnabled) return contents
+  
+  const inToolLoop = isInToolLoop(contents)
+  if (!inToolLoop) return contents
+  
+  const hasThinking = hasTurnStartThinking(contents)
+  if (hasThinking) return contents
+  
+  let toolResultCount = 0
+  for (let i = contents.length - 1; i >= 0; i--) {
+    const msg = contents[i]
+    if (msg.role === 'user') {
+      const funcResponses = msg.parts.filter(p => p.functionResponse !== undefined)
+      if (funcResponses.length > 0) {
+        toolResultCount += funcResponses.length
+      } else {
+        break
+      }
+    } else if (msg.role === 'model') {
+      break
+    }
+  }
+  
+  const syntheticModelContent = toolResultCount <= 1 
+    ? '[Tool execution completed.]' 
+    : `[${toolResultCount} tool executions completed.]`
+  
+  return [
+    ...contents,
+    { role: 'model', parts: [{ text: syntheticModelContent }] },
+    { role: 'user', parts: [{ text: '[Continue]' }] },
+  ]
+}
+
+function convertMessagesToGemini(messages: Message[], thinkingEnabled = false): { contents: GeminiContent[]; systemInstruction?: { parts: Array<{ text: string }> } } {
   const contents: GeminiContent[] = []
   let systemInstruction: { parts: Array<{ text: string }> } | undefined
+
+  const toolIdToName: Record<string, string> = {}
+  for (const msg of messages) {
+    if (msg.role === 'assistant' && msg.tool_calls) {
+      for (const tc of msg.tool_calls) {
+        if (tc.type === 'function') {
+          toolIdToName[tc.id] = tc.function.name
+        }
+      }
+    }
+  }
+
+  let pendingToolParts: GeminiContent['parts'] = []
 
   for (const msg of messages) {
     if (msg.role === 'system') {
@@ -170,10 +249,37 @@ function convertMessagesToGemini(messages: Message[]): { contents: GeminiContent
       continue
     }
 
+    if (pendingToolParts.length > 0 && msg.role !== 'tool') {
+      contents.push({ role: 'user', parts: pendingToolParts })
+      pendingToolParts = []
+    }
+
+    if (msg.role === 'tool' && msg.tool_call_id) {
+      let parsedContent: unknown
+      if (typeof msg.content === 'string') {
+        try {
+          parsedContent = JSON.parse(msg.content)
+        } catch {
+          parsedContent = msg.content
+        }
+      } else {
+        parsedContent = msg.content
+      }
+      const funcName = toolIdToName[msg.tool_call_id] ?? msg.name ?? 'unknown_function'
+      pendingToolParts.push({
+        functionResponse: {
+          name: funcName,
+          response: { result: parsedContent },
+          id: msg.tool_call_id,
+        },
+      })
+      continue
+    }
+
     const role = msg.role === 'assistant' ? 'model' : 'user'
     const parts: GeminiContent['parts'] = []
 
-    if (typeof msg.content === 'string') {
+    if (typeof msg.content === 'string' && msg.content) {
       parts.push({ text: msg.content })
     } else if (Array.isArray(msg.content)) {
       for (const part of msg.content) {
@@ -184,23 +290,25 @@ function convertMessagesToGemini(messages: Message[]): { contents: GeminiContent
     }
 
     if (msg.tool_calls) {
+      let isFirstFunc = true
       for (const tc of msg.tool_calls) {
-        parts.push({
+        let args: Record<string, unknown> = {}
+        try {
+          args = JSON.parse(tc.function.arguments)
+        } catch {}
+        const funcPart: GeminiContent['parts'][0] = {
           functionCall: {
             name: tc.function.name,
-            args: JSON.parse(tc.function.arguments),
+            args,
+            id: tc.id,
           },
-        })
+        }
+        if (isFirstFunc) {
+          funcPart.thoughtSignature = 'skip_thought_signature_validator'
+          isFirstFunc = false
+        }
+        parts.push(funcPart)
       }
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      parts.push({
-        functionResponse: {
-          name: msg.name ?? msg.tool_call_id,
-          response: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
-        },
-      })
     }
 
     if (parts.length > 0) {
@@ -208,7 +316,12 @@ function convertMessagesToGemini(messages: Message[]): { contents: GeminiContent
     }
   }
 
-  return { contents, systemInstruction }
+  if (pendingToolParts.length > 0) {
+    contents.push({ role: 'user', parts: pendingToolParts })
+  }
+
+  const sanitizedContents = sanitizeThinkingForClaude(contents, thinkingEnabled)
+  return { contents: sanitizedContents, systemInstruction }
 }
 
 const UNSUPPORTED_SCHEMA_KEYS = new Set([
@@ -384,7 +497,7 @@ interface AntigravityResponse {
         text?: string
         thought?: boolean
         thoughtSignature?: string
-        functionCall?: { name: string; args: Record<string, unknown> } 
+        functionCall?: { name: string; args: Record<string, unknown>; id?: string } 
       }> }
       finishReason?: string
     }>
@@ -605,7 +718,16 @@ export async function handleChatCompletion(
   projectId: string
 ): Promise<ChatCompletionResponse | Response> {
   const effectiveModel = resolveModelName(request.model)
-  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
+  
+  const thinkingConfig = buildThinkingConfig(
+    effectiveModel,
+    request.reasoning_effort,
+    request.thinking_budget,
+    request.include_thoughts
+  )
+  const thinkingEnabled = thinkingConfig !== null
+  
+  const { contents, systemInstruction } = convertMessagesToGemini(request.messages, thinkingEnabled)
   const tools = convertToolsToGemini(request.tools)
 
   const generationConfig: Record<string, unknown> = {}
@@ -617,12 +739,6 @@ export async function handleChatCompletion(
     generationConfig.stopSequences = Array.isArray(request.stop) ? request.stop : [request.stop]
   }
 
-  const thinkingConfig = buildThinkingConfig(
-    effectiveModel,
-    request.reasoning_effort,
-    request.thinking_budget,
-    request.include_thoughts
-  )
   if (thinkingConfig) {
     generationConfig.thinkingConfig = thinkingConfig
     if (thinkingConfig.thinkingBudget && isClaudeModel(effectiveModel)) {
@@ -688,7 +804,16 @@ export async function handleChatCompletionStream(
   projectId: string
 ): Promise<ReadableStream<Uint8Array> | Response> {
   const effectiveModel = resolveModelName(request.model)
-  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
+  
+  const thinkingConfig = buildThinkingConfig(
+    effectiveModel,
+    request.reasoning_effort,
+    request.thinking_budget,
+    request.include_thoughts
+  )
+  const thinkingEnabled = thinkingConfig !== null
+  
+  const { contents, systemInstruction } = convertMessagesToGemini(request.messages, thinkingEnabled)
   const tools = convertToolsToGemini(request.tools)
 
   const generationConfig: Record<string, unknown> = {}
@@ -700,12 +825,6 @@ export async function handleChatCompletionStream(
     generationConfig.stopSequences = Array.isArray(request.stop) ? request.stop : [request.stop]
   }
 
-  const thinkingConfig = buildThinkingConfig(
-    effectiveModel,
-    request.reasoning_effort,
-    request.thinking_budget,
-    request.include_thoughts
-  )
   if (thinkingConfig) {
     generationConfig.thinkingConfig = thinkingConfig
     if (thinkingConfig.thinkingBudget && isClaudeModel(effectiveModel)) {
@@ -762,6 +881,8 @@ export async function handleChatCompletionStream(
   let isFirstChunk = true
   let isFirstThought = true
   let buffer = ''
+  let toolCallIndex = 0
+  let hasToolCalls = false
 
   const transformStream = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
@@ -822,6 +943,8 @@ export async function handleChatCompletionStream(
             }
 
             if (part.functionCall) {
+              hasToolCalls = true
+              const toolCallId = part.functionCall.id ?? `call_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`
               const chunk: ChatCompletionChunk = {
                 id: completionId,
                 object: 'chat.completion.chunk',
@@ -830,9 +953,10 @@ export async function handleChatCompletionStream(
                 choices: [{
                   index: 0,
                   delta: {
+                    role: 'assistant',
                     tool_calls: [{
-                      index: 0,
-                      id: `call_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
+                      index: toolCallIndex,
+                      id: toolCallId,
                       type: 'function',
                       function: {
                         name: part.functionCall.name,
@@ -844,6 +968,7 @@ export async function handleChatCompletionStream(
                   logprobs: null,
                 }],
               }
+              toolCallIndex++
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`))
             }
           }
@@ -854,7 +979,8 @@ export async function handleChatCompletionStream(
               MAX_TOKENS: 'length',
               SAFETY: 'content_filter',
             }
-            const finishReason = finishReasonMap[candidate.finishReason] ?? 'stop'
+            let finishReason = finishReasonMap[candidate.finishReason] ?? 'stop'
+            if (hasToolCalls) finishReason = 'tool_calls'
 
             const finalChunk: ChatCompletionChunk = {
               id: completionId,

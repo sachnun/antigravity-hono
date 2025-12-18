@@ -36,3 +36,39 @@ export const SEARCH_MODEL = 'gemini-2.5-flash'
 export const SEARCH_THINKING_BUDGET_FAST = 4096
 export const SEARCH_THINKING_BUDGET_DEEP = 16384
 export const SEARCH_TIMEOUT_MS = 60 * 1000
+
+export const QUOTA_GROUPS: Record<string, string[]> = {
+  claude: [
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-5-thinking',
+    'claude-opus-4-5',
+    'claude-opus-4-5-thinking',
+    'gpt-oss-120b-medium',
+  ],
+  'gemini-3-pro': [
+    'gemini-3-pro-high',
+    'gemini-3-pro-low',
+    'gemini-3-pro-preview',
+  ],
+  'gemini-2.5-flash': [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-thinking',
+    'gemini-2.5-flash-lite',
+  ],
+}
+
+export const GROUP_DISPLAY_NAMES: Record<string, string> = {
+  claude: 'Claude / GPT-OSS',
+  'gemini-3-pro': 'Gemini 3 Pro',
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
+}
+
+export const MODEL_TO_GROUP: Record<string, string> = Object.entries(QUOTA_GROUPS).reduce(
+  (acc, [group, models]) => {
+    for (const model of models) {
+      acc[model] = group
+    }
+    return acc
+  },
+  {} as Record<string, string>
+)

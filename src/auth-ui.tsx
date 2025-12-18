@@ -181,6 +181,62 @@ const styles = `
     padding: 24px;
     color: #737373;
   }
+  .quota-section {
+    margin-top: 16px;
+  }
+  .quota-group {
+    margin-bottom: 16px;
+  }
+  .quota-group:last-child {
+    margin-bottom: 0;
+  }
+  .quota-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .quota-name {
+    font-size: 13px;
+    color: #e5e5e5;
+  }
+  .quota-value {
+    font-size: 12px;
+    color: #a3a3a3;
+  }
+  .quota-bar {
+    height: 8px;
+    background: #262626;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .quota-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+  .quota-fill.high { background: #22c55e; }
+  .quota-fill.medium { background: #f59e0b; }
+  .quota-fill.low { background: #ef4444; }
+  .quota-fill.exhausted { background: #dc2626; }
+  .quota-reset {
+    font-size: 11px;
+    color: #737373;
+    margin-top: 4px;
+  }
+  .quota-loading {
+    text-align: center;
+    padding: 16px;
+    color: #737373;
+    font-size: 13px;
+  }
+  .quota-error {
+    color: #ef4444;
+    font-size: 12px;
+    padding: 8px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 4px;
+  }
 `
 
 const clientScript = `
@@ -412,7 +468,94 @@ const clientScript = `
     document.getElementById('adminKeyInput').value = '';
   }
 
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return null;
+    const now = Date.now();
+    const diff = timestamp - now;
+    if (diff <= 0) return 'Now';
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return days + 'd ' + (hours % 24) + 'h';
+    if (hours > 0) return hours + 'h ' + mins + 'm';
+    return mins + 'm';
+  }
+
+  function getQuotaClass(fraction) {
+    if (fraction === null || fraction <= 0) return 'exhausted';
+    if (fraction <= 0.2) return 'low';
+    if (fraction <= 0.5) return 'medium';
+    return 'high';
+  }
+
+  async function loadQuota() {
+    const quotaContainer = document.getElementById('quotaContainer');
+    if (!quotaContainer) return;
+    
+    quotaContainer.innerHTML = '<div class="quota-loading">Loading quota...</div>';
+    
+    try {
+      const res = await fetch('/admin/quota', { headers: getAuthHeaders() });
+      if (!res.ok) {
+        quotaContainer.innerHTML = '<div class="quota-error">Failed to load quota</div>';
+        return;
+      }
+      
+      const data = await res.json();
+      let html = '';
+      
+      for (const account of data.quotas) {
+        html += '<div class="account-card">';
+        html += '<div class="account-header"><span class="account-email">' + account.email + '</span></div>';
+        
+        if (account.status === 'error') {
+          html += '<div class="quota-error">' + (account.error || 'Failed to fetch quota') + '</div>';
+        } else {
+          html += '<div class="quota-section">';
+          for (const group of account.groups) {
+            const pct = group.remainingFraction !== null ? Math.round(group.remainingFraction * 100) : 0;
+            const cls = getQuotaClass(group.remainingFraction);
+            const resetText = group.resetTimestamp ? formatRelativeTime(group.resetTimestamp) : null;
+            
+            html += '<div class="quota-group">';
+            html += '<div class="quota-header">';
+            html += '<span class="quota-name">' + group.displayName + '</span>';
+            html += '<span class="quota-value">' + pct + '%</span>';
+            html += '</div>';
+            html += '<div class="quota-bar"><div class="quota-fill ' + cls + '" style="width: ' + pct + '%;"></div></div>';
+            if (resetText) {
+              html += '<div class="quota-reset">Reset: ' + resetText + '</div>';
+            }
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      
+      if (data.quotas.length === 0) {
+        html = '<div class="empty-state">No accounts to show quota for</div>';
+      }
+      
+      quotaContainer.innerHTML = html;
+    } catch (e) {
+      quotaContainer.innerHTML = '<div class="quota-error">Error: ' + e.message + '</div>';
+    }
+  }
+
+  async function refreshQuota() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+    await loadQuota();
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+  }
+
   loadAccounts();
+  loadQuota();
 `
 
 export const AuthPage: FC = () => {
@@ -450,6 +593,14 @@ export const AuthPage: FC = () => {
                 <span>Loading...</span>
               </div>
               <div id="accountList" style="margin-top: 16px;"></div>
+            </div>
+
+            <div class="section">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div class="section-title" style="margin-bottom: 0;">Quota Status</div>
+                <button class="btn-sm btn-secondary" onclick="refreshQuota()">Refresh</button>
+              </div>
+              <div id="quotaContainer"></div>
             </div>
 
             <div class="section">
