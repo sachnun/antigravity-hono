@@ -82,6 +82,9 @@ export async function fetchProjectInfo(accessToken: string): Promise<ProjectInfo
     ...CODE_ASSIST_HEADERS,
   }
 
+  let bestTier = 'unknown'
+  let foundProjectId = ''
+
   for (const baseEndpoint of CODE_ASSIST_ENDPOINT_FALLBACKS) {
     const url = `${baseEndpoint}/v1internal:loadCodeAssist`
     const response = await fetch(url, {
@@ -100,41 +103,43 @@ export async function fetchProjectInfo(accessToken: string): Promise<ProjectInfo
 
     const data = await response.json() as Record<string, unknown>
     
-    let projectId = ''
-    if (typeof data.cloudaicompanionProject === 'string' && data.cloudaicompanionProject) {
-      projectId = data.cloudaicompanionProject
-    } else {
-      const project = data.cloudaicompanionProject as Record<string, unknown> | undefined
-      if (project && typeof project.id === 'string' && project.id) {
-        projectId = project.id
+    const paidTier = data.paidTier as Record<string, unknown> | undefined
+    if (paidTier && typeof paidTier.id === 'string' && bestTier === 'unknown') {
+      bestTier = paidTier.id
+    }
+
+    if (!foundProjectId) {
+      if (typeof data.cloudaicompanionProject === 'string' && data.cloudaicompanionProject) {
+        foundProjectId = data.cloudaicompanionProject
+      } else {
+        const project = data.cloudaicompanionProject as Record<string, unknown> | undefined
+        if (project && typeof project.id === 'string' && project.id) {
+          foundProjectId = project.id
+        }
       }
     }
 
-    let tier = 'unknown'
-    const paidTier = data.paidTier as Record<string, unknown> | undefined
-    if (paidTier && typeof paidTier.id === 'string') {
-      tier = paidTier.id
-    } else {
+    if (bestTier === 'unknown') {
       const currentTier = data.currentTier as Record<string, unknown> | undefined
       if (currentTier && typeof currentTier.id === 'string') {
-        tier = currentTier.id
+        bestTier = currentTier.id
       } else {
         const allowedTiers = data.allowedTiers as Array<Record<string, unknown>> | undefined
         if (allowedTiers) {
           const defaultTier = allowedTiers.find(t => t.isDefault === true)
           if (defaultTier && typeof defaultTier.id === 'string') {
-            tier = defaultTier.id
+            bestTier = defaultTier.id
           }
         }
       }
     }
 
-    if (projectId) {
-      return { projectId, tier }
+    if (foundProjectId && bestTier !== 'unknown') {
+      break
     }
   }
 
-  return { projectId: '', tier: 'unknown' }
+  return { projectId: foundProjectId, tier: bestTier }
 }
 
 export interface ExchangeResult {
