@@ -3,10 +3,12 @@
   "name": "antigravity-hono",
   "main": "src/index.tsx",
   "compatibility_date": "2025-12-17",
-  "kv_namespaces": [
+  "d1_databases": [
     {
-      "binding": "ANTIGRAVITY_AUTH",
-      "id": "5cd3cc8be4224d908a3f5804e700ec36"
+      "binding": "DB",
+      "database_name": "antigravity-auth",
+      "database_id": "5d317ca5-19d1-4a94-90cd-28700435fa6e",
+      "migrations_dir": "drizzle"
     }
   ],
   "triggers": {
