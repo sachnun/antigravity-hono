@@ -12,8 +12,8 @@ const result = await esbuild.build({
 })
 
 const code = result.outputFiles[0].text
-const escaped = code.replace(/`/g, '\\`').replace(/\$/g, '\\$')
-const output = `export const clientScript = \`${escaped}\`\n`
+const escaped = JSON.stringify(code)
+const output = `export const clientScript = ${escaped}\n`
 
 await Bun.write('src/client/auth.js', output)
 console.log('Client build complete: src/client/auth.js')
