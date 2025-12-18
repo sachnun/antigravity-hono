@@ -190,6 +190,21 @@ function hasTurnStartThinking(contents: GeminiContent[]): boolean {
   return false
 }
 
+function hasValidThoughtSignature(contents: GeminiContent[]): boolean {
+  for (let i = contents.length - 1; i >= 0; i--) {
+    const msg = contents[i]
+    if (msg.role === 'model') {
+      for (const part of msg.parts) {
+        if (part.functionCall && part.thoughtSignature && part.thoughtSignature !== 'skip_thought_signature_validator') {
+          return true
+        }
+      }
+      break
+    }
+  }
+  return false
+}
+
 function sanitizeThinkingForClaude(contents: GeminiContent[], thinkingEnabled: boolean): GeminiContent[] {
   if (!thinkingEnabled) return contents
   
@@ -198,6 +213,9 @@ function sanitizeThinkingForClaude(contents: GeminiContent[], thinkingEnabled: b
   
   const hasThinking = hasTurnStartThinking(contents)
   if (hasThinking) return contents
+  
+  const hasSignature = hasValidThoughtSignature(contents)
+  if (hasSignature) return contents
   
   let toolResultCount = 0
   for (let i = contents.length - 1; i >= 0; i--) {
@@ -303,10 +321,12 @@ function convertMessagesToGemini(messages: Message[], thinkingEnabled = false): 
             id: tc.id,
           },
         }
-        if (isFirstFunc) {
+        if (tc.thought_signature) {
+          funcPart.thoughtSignature = tc.thought_signature
+        } else if (isFirstFunc) {
           funcPart.thoughtSignature = 'skip_thought_signature_validator'
-          isFirstFunc = false
         }
+        isFirstFunc = false
         parts.push(funcPart)
       }
     }
@@ -525,7 +545,12 @@ function convertGeminiToOpenAI(
 
   let content: string | null = null
   let reasoningContent: string | null = null
-  const toolCalls: ChatCompletionResponse['choices'][0]['message']['tool_calls'] = []
+  const toolCalls: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+    thought_signature?: string
+  }> = []
 
   for (const part of parts) {
     if (part.text) {
@@ -536,14 +561,18 @@ function convertGeminiToOpenAI(
       }
     }
     if (part.functionCall) {
-      toolCalls.push({
+      const toolCall: typeof toolCalls[0] = {
         id: `call_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
         type: 'function',
         function: {
           name: part.functionCall.name,
           arguments: JSON.stringify(part.functionCall.args),
         },
-      })
+      }
+      if (part.thoughtSignature) {
+        toolCall.thought_signature = part.thoughtSignature
+      }
+      toolCalls.push(toolCall)
     }
   }
 
@@ -945,6 +974,16 @@ export async function handleChatCompletionStream(
             if (part.functionCall) {
               hasToolCalls = true
               const toolCallId = part.functionCall.id ?? `call_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`
+              const toolCallDelta = {
+                index: toolCallIndex,
+                id: toolCallId,
+                type: 'function' as const,
+                function: {
+                  name: part.functionCall.name,
+                  arguments: JSON.stringify(part.functionCall.args),
+                },
+                thought_signature: part.thoughtSignature,
+              }
               const chunk: ChatCompletionChunk = {
                 id: completionId,
                 object: 'chat.completion.chunk',
@@ -954,15 +993,7 @@ export async function handleChatCompletionStream(
                   index: 0,
                   delta: {
                     role: 'assistant',
-                    tool_calls: [{
-                      index: toolCallIndex,
-                      id: toolCallId,
-                      type: 'function',
-                      function: {
-                        name: part.functionCall.name,
-                        arguments: JSON.stringify(part.functionCall.args),
-                      },
-                    }],
+                    tool_calls: [toolCallDelta],
                   },
                   finish_reason: null,
                   logprobs: null,
