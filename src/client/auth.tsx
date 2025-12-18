@@ -426,7 +426,7 @@ const App = () => {
             </div>
           )}
 
-          <div class="mt-4 max-h-[calc(100vh-280px)] overflow-y-auto">
+          <div class="mt-4 max-h-[calc(100vh-280px)] overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent hover:scrollbar-thumb-neutral-600">
             {accounts.map((account) => (
               <AccountCard
                 account={account}
