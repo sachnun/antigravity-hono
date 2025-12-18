@@ -1,70 +1,100 @@
 # Antigravity Hono
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/daku/antigravity-hono)
+
+OpenAI and Anthropic compatible API proxy powered by Google Antigravity, built with [Hono](https://hono.dev) on Cloudflare Workers.
+
 > **Warning**: This project uses Google's internal API. Use at your own risk.
 
-OpenAI and Anthropic compatible API proxy powered by Google Antigravity.
+## Prerequisites
 
-## Setup
+- [Bun](https://bun.sh) >= 1.0
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
+- Cloudflare account
 
-1. Install dependencies
+## Getting Started
+
+### 1. Install dependencies
 
 ```sh
 bun install
 ```
 
-2. Create D1 database
+### 2. Create D1 database
 
 ```sh
 wrangler d1 create antigravity-auth
 ```
 
-3. Update `wrangler.jsonc` with your database ID
+### 3. Configure database
 
-4. Run migrations
+Update `wrangler.jsonc` with your database ID from the previous step.
+
+### 4. Run migrations
 
 ```sh
 wrangler d1 migrations apply antigravity-auth --local
 ```
 
-5. Generate types
+### 5. Generate Cloudflare types
 
 ```sh
 bun run cf-typegen
 ```
 
-6. Start dev server
+### 6. Start development server
 
 ```sh
 bun run dev
 ```
 
-## Deploy
+## Deployment
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/daku/antigravity-hono)
+### Using Deploy Button
 
-Or manually:
+Click the deploy button above to deploy directly to Cloudflare Workers.
 
-1. Set environment variables
+### Manual Deployment
+
+1. Set required secrets:
 
 ```sh
 wrangler secret put ADMIN_KEY
 wrangler secret put API_KEY
 ```
 
-2. Deploy
+2. Deploy:
 
 ```sh
 bun run deploy
 ```
 
-## Endpoints
+## API Reference
 
-- `POST /v1/chat/completions` - OpenAI compatible
-- `POST /v1/messages` - Anthropic compatible
-- `GET /v1/models` - List models
-- `GET /auth` - Auth UI
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | OpenAI-compatible chat completions |
+| `/v1/messages` | POST | Anthropic-compatible messages |
+| `/v1/models` | GET | List available models |
+| `/auth` | GET | Authentication UI |
+| `/doc` | GET | Swagger UI documentation |
 
 ## Environment Variables
 
-- `ADMIN_KEY` - Admin API key for token management
-- `API_KEY` - API key for chat completions
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ADMIN_KEY` | Admin API key for token management | Yes |
+| `API_KEY` | API key for chat completions | Yes |
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `bun run dev` | Start local development server |
+| `bun run deploy` | Build and deploy to Cloudflare Workers |
+| `bun run cf-typegen` | Generate Cloudflare bindings types |
+| `bun run migrate` | Apply database migrations (remote) |
+
+## License
+
+MIT
