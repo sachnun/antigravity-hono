@@ -34,7 +34,6 @@ export interface StoredToken {
     gemini?: number
     claude?: number
   }
-  lastUsed?: number
 }
 
 export type ModelFamily = 'gemini' | 'claude'
@@ -99,11 +98,6 @@ export async function getTokenForModel(kv: KVNamespace, model: string): Promise<
   }
 
   const selected = available[Math.floor(Math.random() * available.length)]
-  
-  if (selected) {
-    selected.lastUsed = Date.now()
-    await setAllTokens(kv, tokens)
-  }
 
   return selected ?? null
 }
@@ -172,7 +166,6 @@ export async function refreshAndStore(kv: KVNamespace, stored: StoredToken): Pro
     expiresAt: result.expiresAt,
     email: stored.email,
     rateLimitUntil: stored.rateLimitUntil,
-    lastUsed: stored.lastUsed,
   }
   
   await setStoredToken(kv, updated)

@@ -375,7 +375,6 @@ app.get('/admin/token/details', async (c) => {
       refreshToken: t.refreshToken,
       expiresAt: t.expiresAt,
       rateLimitUntil: t.rateLimitUntil,
-      lastUsed: t.lastUsed,
     })),
   })
 })
