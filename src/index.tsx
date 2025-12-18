@@ -124,14 +124,14 @@ const chatCompletionsRoute = createRoute({
             basic: {
               summary: 'Basic message',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [{ role: 'user', content: 'Hello!' }],
               },
             },
             withSystem: {
               summary: 'With system prompt',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [
                   { role: 'system', content: 'You are a helpful assistant that speaks like a pirate.' },
                   { role: 'user', content: 'Tell me about the ocean.' },
@@ -141,7 +141,7 @@ const chatCompletionsRoute = createRoute({
             streaming: {
               summary: 'Streaming response',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [{ role: 'user', content: 'Write a short poem about coding.' }],
                 stream: true,
               },
@@ -149,7 +149,7 @@ const chatCompletionsRoute = createRoute({
             thinking: {
               summary: 'With extended thinking',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [{ role: 'user', content: 'Solve step by step: What is 847 * 239?' }],
                 reasoning_effort: 'high',
                 include_thoughts: true,
@@ -158,7 +158,7 @@ const chatCompletionsRoute = createRoute({
             multiTurn: {
               summary: 'Multi-turn conversation',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [
                   { role: 'user', content: 'My name is Alice.' },
                   { role: 'assistant', content: 'Hello Alice! Nice to meet you.' },
@@ -169,7 +169,7 @@ const chatCompletionsRoute = createRoute({
             tools: {
               summary: 'With tool/function calling',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
                 tools: [{
                   type: 'function',
@@ -191,7 +191,7 @@ const chatCompletionsRoute = createRoute({
             withImage: {
               summary: 'With image (base64)',
               value: {
-                model: 'claude-opus-4-5',
+                model: 'claude-sonnet-4-5',
                 messages: [{
                   role: 'user',
                   content: [
