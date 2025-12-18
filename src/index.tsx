@@ -19,6 +19,17 @@ import {
   ChatCompletionResponseSchema,
   ModelsListResponseSchema,
 } from './openai'
+import {
+  handleAnthropicMessage,
+  handleAnthropicMessageStream,
+  listAnthropicModels,
+  getAnthropicModel,
+  isValidAnthropicModel,
+  AnthropicMessageRequestSchema,
+  AnthropicMessageResponseSchema,
+  AnthropicModelsListResponseSchema,
+  AnthropicErrorSchema,
+} from './anthropic'
 import { getValidAccessToken, setStoredToken, handleTokenRefresh, type StoredToken } from './storage'
 import { AuthPage } from './auth-ui'
 
@@ -92,6 +103,7 @@ app.doc('/openapi.json', {
   },
   tags: [
     { name: 'OpenAI Compatible', description: 'OpenAI-compatible chat completions API' },
+    { name: 'Anthropic Compatible', description: 'Anthropic-compatible messages API' },
     { name: 'Search', description: 'Google Search endpoints' },
   ],
 })
@@ -293,6 +305,121 @@ app.openapi(modelRetrieveRoute, async (c) => {
 app.get('/', swaggerUI({ url: '/openapi.json' }))
 
 app.get('/v1', (c) => c.redirect('/'))
+
+const anthropicMessagesRoute = createRoute({
+  method: 'post',
+  path: '/v1/messages',
+  tags: ['Anthropic Compatible'],
+  summary: 'Create a message',
+  description: 'Send messages to Claude models using Anthropic API format',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: AnthropicMessageRequestSchema,
+          examples: {
+            basic: {
+              summary: 'Basic message',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [{ role: 'user', content: 'Hello!' }],
+              },
+            },
+            thinking: {
+              summary: 'With thinking',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 8192,
+                messages: [{ role: 'user', content: 'What is 25 * 37?' }],
+                thinking: { type: 'enabled', budget_tokens: 4096 },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': { schema: AnthropicMessageResponseSchema },
+        'text/event-stream': { schema: z.any() },
+      },
+      description: 'Message response (or SSE stream if stream=true)',
+    },
+    401: {
+      content: { 'application/json': { schema: AnthropicErrorSchema } },
+      description: 'Unauthorized',
+    },
+    400: {
+      content: { 'application/json': { schema: AnthropicErrorSchema } },
+      description: 'Bad request',
+    },
+  },
+})
+
+app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
+  const apiKey = c.env.API_KEY
+  const authHeader = c.req.header('Authorization')
+  const xApiKey = c.req.header('x-api-key')
+
+  if (apiKey) {
+    const providedKey = xApiKey ?? authHeader?.replace('Bearer ', '')
+    if (providedKey !== apiKey) {
+      return c.json({
+        type: 'error',
+        error: { type: 'authentication_error', message: 'Invalid API key' },
+      }, 401)
+    }
+  }
+
+  const body = c.req.valid('json')
+
+  if (!isValidAnthropicModel(body.model)) {
+    return c.json({
+      type: 'error',
+      error: { type: 'invalid_request_error', message: `Model '${body.model}' not found` },
+    }, 400)
+  }
+
+  const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
+  if (!stored) {
+    return c.json({
+      type: 'error',
+      error: { type: 'authentication_error', message: 'No valid token available' },
+    }, 401)
+  }
+
+  const accessToken = stored.accessToken
+  const projectId = stored.projectId
+  const tokenEmail = stored.email
+
+  try {
+    if (body.stream) {
+      const stream = await handleAnthropicMessageStream(body, accessToken, projectId)
+      if (stream instanceof Response) return stream
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      })
+    }
+
+    const result = await handleAnthropicMessage(body, accessToken, projectId)
+    if (result instanceof Response) return result
+    return c.json(result, 200)
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('429') && tokenEmail) {
+      const { markRateLimited } = await import('./storage')
+      await markRateLimited(c.env.ANTIGRAVITY_AUTH, tokenEmail, body.model, 60000)
+    }
+    throw e
+  }
+})
 
 app.post('/admin/token', async (c) => {
   const adminKey = c.env.ADMIN_KEY
