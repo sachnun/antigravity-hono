@@ -616,6 +616,7 @@ app.get('/admin/token/details', async (c) => {
     tokens: tokens.map(t => ({
       email: t.email,
       projectId: t.projectId,
+      tier: t.tier,
       accessToken: t.accessToken,
       refreshToken: t.refreshToken,
       expiresAt: t.expiresAt,
@@ -698,10 +699,11 @@ app.post('/auth/callback', async (c) => {
     projectId: result.projectId ?? '',
     expiresAt: result.expiresAt,
     email: result.email,
+    tier: result.tier,
   }
 
   await setStoredToken(c.env.ANTIGRAVITY_AUTH, token)
-  return c.json({ success: true, projectId: token.projectId, email: token.email, expiresAt: token.expiresAt })
+  return c.json({ success: true, projectId: token.projectId, email: token.email, tier: token.tier, expiresAt: token.expiresAt })
 })
 
 app.onError((err, c) => {

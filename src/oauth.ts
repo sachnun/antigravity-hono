@@ -70,7 +70,12 @@ export async function authorizeAntigravity(redirectUri?: string): Promise<Author
   }
 }
 
-export async function fetchProjectId(accessToken: string): Promise<string> {
+interface ProjectInfo {
+  projectId: string
+  tier: string
+}
+
+export async function fetchProjectInfo(accessToken: string): Promise<ProjectInfo> {
   const loadHeaders: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
@@ -94,16 +99,29 @@ export async function fetchProjectId(accessToken: string): Promise<string> {
     if (!response.ok) continue
 
     const data = await response.json() as Record<string, unknown>
+    
+    let projectId = ''
     if (typeof data.cloudaicompanionProject === 'string' && data.cloudaicompanionProject) {
-      return data.cloudaicompanionProject
+      projectId = data.cloudaicompanionProject
+    } else {
+      const project = data.cloudaicompanionProject as Record<string, unknown> | undefined
+      if (project && typeof project.id === 'string' && project.id) {
+        projectId = project.id
+      }
     }
-    const project = data.cloudaicompanionProject as Record<string, unknown> | undefined
-    if (project && typeof project.id === 'string' && project.id) {
-      return project.id
+
+    let tier = 'unknown'
+    const currentTier = data.currentTier as Record<string, unknown> | undefined
+    if (currentTier && typeof currentTier.id === 'string') {
+      tier = currentTier.id
+    }
+
+    if (projectId) {
+      return { projectId, tier }
     }
   }
 
-  return ''
+  return { projectId: '', tier: 'unknown' }
 }
 
 export interface ExchangeResult {
@@ -112,6 +130,7 @@ export interface ExchangeResult {
   expiresAt: number
   email?: string
   projectId?: string
+  tier?: string
 }
 
 export async function exchangeAntigravity(
@@ -154,14 +173,15 @@ export async function exchangeAntigravity(
     ? (await userInfoResponse.json() as { email?: string })
     : {}
 
-  const projectId = await fetchProjectId(tokenPayload.access_token)
+  const projectInfo = await fetchProjectInfo(tokenPayload.access_token)
 
   return {
     accessToken: tokenPayload.access_token,
     refreshToken: tokenPayload.refresh_token,
     expiresAt: Date.now() + tokenPayload.expires_in * 1000,
     email: userInfo.email,
-    projectId: projectId || undefined,
+    projectId: projectInfo.projectId || undefined,
+    tier: projectInfo.tier,
   }
 }
 

@@ -30,6 +30,7 @@ export interface StoredToken {
   projectId: string
   expiresAt: number
   email: string
+  tier?: string
   rateLimitUntil?: {
     gemini?: number
     claude?: number
