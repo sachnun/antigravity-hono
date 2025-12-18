@@ -1,188 +1,5 @@
 import type { FC } from 'hono/jsx'
 
-const styles = `
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #0a0a0a;
-    color: #e5e5e5;
-    min-height: 100vh;
-    padding: 40px 20px;
-    overflow-y: auto;
-  }
-  .container {
-    max-width: 700px;
-    width: 100%;
-    margin: 0 auto;
-    background: #171717;
-    border-radius: 12px;
-    padding: 32px;
-    border: 1px solid #262626;
-  }
-  h1 { font-size: 24px; margin-bottom: 8px; color: #fff; }
-  .subtitle { color: #737373; margin-bottom: 24px; }
-  .section {
-    margin-bottom: 24px;
-    padding: 20px;
-    background: #0a0a0a;
-    border-radius: 8px;
-    border: 1px solid #262626;
-  }
-  .section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #a3a3a3;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
-    border-radius: 6px;
-    font-size: 14px;
-  }
-  .status.valid {
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    color: #22c55e;
-  }
-  .status.invalid {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: #ef4444;
-  }
-  .status.loading {
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    color: #3b82f6;
-  }
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-  button {
-    background: #2563eb;
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  button:hover { background: #1d4ed8; }
-  button:disabled { background: #374151; cursor: not-allowed; }
-  .btn-full { width: 100%; }
-  input, textarea {
-    width: 100%;
-    padding: 12px;
-    border-radius: 6px;
-    border: 1px solid #374151;
-    background: #171717;
-    color: #e5e5e5;
-    font-size: 14px;
-    font-family: monospace;
-  }
-  input:focus, textarea:focus { outline: none; border-color: #2563eb; }
-  textarea { resize: vertical; min-height: 80px; }
-  .url-box {
-    background: #0a0a0a;
-    border: 1px solid #374151;
-    border-radius: 6px;
-    padding: 12px;
-    font-family: monospace;
-    font-size: 12px;
-    word-break: break-all;
-    max-height: 100px;
-    overflow-y: auto;
-    margin-bottom: 12px;
-  }
-  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
-  .btn-secondary { background: #374151; }
-  .btn-secondary:hover { background: #4b5563; }
-  .btn-danger { background: #dc2626; }
-  .btn-danger:hover { background: #b91c1c; }
-  .btn-success { background: #16a34a; }
-  .btn-success:hover { background: #15803d; }
-  .btn-sm { padding: 6px 12px; font-size: 12px; }
-  .step { display: flex; gap: 12px; margin-bottom: 16px; }
-  .step-num {
-    width: 24px;
-    height: 24px;
-    background: #2563eb;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
-    flex-shrink: 0;
-  }
-  .step-content { flex: 1; }
-  .step-content p { color: #a3a3a3; font-size: 14px; margin-bottom: 12px; }
-  .hidden { display: none; }
-  .error { color: #ef4444; font-size: 14px; margin-top: 8px; }
-  .success { color: #22c55e; font-size: 14px; margin-top: 8px; }
-  .account-card {
-    background: #171717;
-    border: 1px solid #262626;
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 12px;
-  }
-  .account-card.rate-limited {
-    border-color: #f59e0b;
-    background: rgba(245, 158, 11, 0.05);
-  }
-  .account-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-  .account-email {
-    font-weight: 600;
-    color: #fff;
-    font-size: 14px;
-  }
-  .account-badge {
-    background: #22c55e;
-    color: #000;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .account-details {
-    font-size: 12px;
-    color: #737373;
-  }
-  .account-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-  }
-  .account-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-  .expiry-warn { color: #f59e0b; }
-  .expiry-ok { color: #22c55e; }
-  .expiry-expired { color: #ef4444; }
-  .empty-state {
-    text-align: center;
-    padding: 24px;
-    color: #737373;
-  }
-`
-
 const clientScript = `
   let authUrl = '';
   let adminKey = localStorage.getItem('adminKey') || '';
@@ -195,13 +12,13 @@ const clientScript = `
     if (!expiresAt) return { text: 'Unknown', class: '' };
     const now = Date.now();
     const diff = expiresAt - now;
-    if (diff <= 0) return { text: 'Expired', class: 'expiry-expired' };
+    if (diff <= 0) return { text: 'Expired', class: 'text-red-500' };
     
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     
     const text = hours > 0 ? hours + 'h ' + mins + 'm' : mins + 'm';
-    const cls = diff < 30 * 60 * 1000 ? 'expiry-warn' : 'expiry-ok';
+    const cls = diff < 30 * 60 * 1000 ? 'text-amber-500' : 'text-green-500';
     return { text, class: cls };
   }
 
@@ -217,8 +34,12 @@ const clientScript = `
     const loginSection = document.getElementById('loginSection');
     
     try {
-      const res = await fetch('/admin/token/details', { headers: getAuthHeaders() });
-      if (res.status === 401) {
+      const [tokenRes, quotaRes] = await Promise.all([
+        fetch('/admin/token/details', { headers: getAuthHeaders() }),
+        fetch('/admin/quota', { headers: getAuthHeaders() })
+      ]);
+      
+      if (tokenRes.status === 401) {
         mainContent.classList.add('hidden');
         loginSection.classList.remove('hidden');
         return;
@@ -227,53 +48,86 @@ const clientScript = `
       mainContent.classList.remove('hidden');
       loginSection.classList.add('hidden');
       
-      if (res.ok) {
-        const data = await res.json();
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        const quotaData = quotaRes.ok ? await quotaRes.json() : { quotas: [] };
         
-        statusEl.className = 'status valid';
-        statusEl.innerHTML = '<span class="dot"></span><span>' + data.tokens.length + ' account(s) configured</span>';
+        const quotaByEmail = {};
+        for (const q of quotaData.quotas || []) {
+          quotaByEmail[q.email] = q;
+        }
+        
+        statusEl.className = 'flex items-center gap-2 p-3 rounded-md text-sm bg-green-500/10 border border-green-500/30 text-green-500';
+        statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-current"></span><span>' + tokenData.tokens.length + ' account(s) configured</span>';
         
         let html = '';
-        for (const token of data.tokens) {
+        for (const token of tokenData.tokens) {
           const expiry = formatExpiry(token.expiresAt);
           const geminiRL = token.rateLimitUntil?.gemini;
           const claudeRL = token.rateLimitUntil?.claude;
           const hasRL = (geminiRL && Date.now() < geminiRL) || (claudeRL && Date.now() < claudeRL);
+          const quota = quotaByEmail[token.email];
           
           html += \`
-            <div class="account-card \${hasRL ? 'rate-limited' : ''}">
-              <div class="account-header">
-                <span class="account-email">\${token.email}</span>
+            <div class="bg-neutral-900 border rounded-lg p-4 mb-3 \${hasRL ? 'border-amber-500 bg-amber-500/5' : 'border-neutral-800'}">
+              <div class="flex justify-between items-center mb-3">
+                <span class="font-semibold text-white text-sm">\${token.email}</span>
                 <div>
-                  \${hasRL ? '<span class="account-badge" style="background:#f59e0b;">RATE LIMITED</span>' : ''}
+                  \${hasRL ? '<span class="bg-amber-500 text-black px-2 py-0.5 rounded text-xs font-semibold">RATE LIMITED</span>' : ''}
                 </div>
               </div>
-              <div class="account-details">
-                <div class="account-row">
+              <div class="text-xs text-neutral-500 space-y-1">
+                <div class="flex justify-between">
                   <span>Project ID</span>
                   <span>\${token.projectId || 'N/A'}</span>
                 </div>
-                <div class="account-row">
+                <div class="flex justify-between">
                   <span>Expires</span>
                   <span class="\${expiry.class}">\${expiry.text}</span>
                 </div>
-                \${token.lastUsed ? '<div class="account-row"><span>Last Used</span><span>' + new Date(token.lastUsed).toLocaleTimeString() + '</span></div>' : ''}
+                \${token.lastUsed ? '<div class="flex justify-between"><span>Last Used</span><span>' + new Date(token.lastUsed).toLocaleTimeString() + '</span></div>' : ''}
               </div>
-              <div class="account-actions">
-                <button class="btn-sm btn-danger" onclick="deleteAccount('\${token.email}')">Delete</button>
+          \`;
+          
+          if (quota && quota.status === 'success' && quota.groups) {
+            html += '<div class="mt-4 space-y-3">';
+            for (const group of quota.groups) {
+              const pct = group.remainingFraction !== null ? Math.round(group.remainingFraction * 100) : 0;
+              const cls = getQuotaClass(group.remainingFraction);
+              const resetText = group.resetTimestamp ? formatRelativeTime(group.resetTimestamp) : null;
+              
+              html += '<div>';
+              html += '<div class="flex justify-between items-center mb-1">';
+              html += '<span class="text-xs text-neutral-300">' + group.displayName + '</span>';
+              html += '<span class="text-xs text-neutral-500">' + pct + '%</span>';
+              html += '</div>';
+              html += '<div class="h-2 bg-neutral-800 rounded-full overflow-hidden"><div class="h-full rounded-full transition-all ' + cls + '" style="width: ' + pct + '%;"></div></div>';
+              if (resetText) {
+                html += '<div class="text-[11px] text-neutral-600 mt-1">Reset: ' + resetText + '</div>';
+              }
+              html += '</div>';
+            }
+            html += '</div>';
+          } else if (quota && quota.status === 'error') {
+            html += '<div class="text-red-500 text-xs p-2 bg-red-500/10 rounded mt-3">' + (quota.error || 'Failed to fetch quota') + '</div>';
+          }
+          
+          html += \`
+              <div class="flex gap-2 mt-3">
+                <button class="px-3 py-1.5 text-xs font-medium rounded bg-red-600 hover:bg-red-700 text-white" onclick="deleteAccount('\${token.email}')">Delete</button>
               </div>
             </div>
           \`;
         }
         listEl.innerHTML = html;
       } else {
-        statusEl.className = 'status invalid';
-        statusEl.innerHTML = '<span class="dot"></span><span>No accounts configured</span>';
-        listEl.innerHTML = '<div class="empty-state">No accounts added yet. Add one below.</div>';
+        statusEl.className = 'flex items-center gap-2 p-3 rounded-md text-sm bg-red-500/10 border border-red-500/30 text-red-500';
+        statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-current"></span><span>No accounts configured</span>';
+        listEl.innerHTML = '<div class="text-center py-6 text-neutral-500">No accounts added yet. Add one below.</div>';
       }
     } catch (e) {
-      statusEl.className = 'status invalid';
-      statusEl.innerHTML = '<span class="dot"></span><span>Error loading accounts</span>';
+      statusEl.className = 'flex items-center gap-2 p-3 rounded-md text-sm bg-red-500/10 border border-red-500/30 text-red-500';
+      statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-current"></span><span>Error loading accounts</span>';
       listEl.innerHTML = '';
     }
   }
@@ -357,11 +211,11 @@ const clientScript = `
     const resultEl = document.getElementById('exchangeResult');
     
     if (!callbackUrl) {
-      resultEl.innerHTML = '<div class="error">Please paste the callback URL</div>';
+      resultEl.innerHTML = '<div class="text-red-500 text-sm mt-2">Please paste the callback URL</div>';
       return;
     }
 
-    resultEl.innerHTML = '<div class="status loading"><span class="dot"></span>Exchanging...</div>';
+    resultEl.innerHTML = '<div class="flex items-center gap-2 p-3 rounded-md text-sm bg-blue-500/10 border border-blue-500/30 text-blue-500 mt-2"><span class="w-2 h-2 rounded-full bg-current"></span>Exchanging...</div>';
 
     try {
       const url = new URL(callbackUrl);
@@ -369,7 +223,7 @@ const clientScript = `
       const state = url.searchParams.get('state');
 
       if (!code || !state) {
-        resultEl.innerHTML = '<div class="error">Invalid URL - missing code or state</div>';
+        resultEl.innerHTML = '<div class="text-red-500 text-sm mt-2">Invalid URL - missing code or state</div>';
         return;
       }
 
@@ -382,7 +236,7 @@ const clientScript = `
       const data = await res.json();
 
       if (res.ok) {
-        resultEl.innerHTML = '<div class="success">Added: ' + data.email + '</div>';
+        resultEl.innerHTML = '<div class="text-green-500 text-sm mt-2">Added: ' + data.email + '</div>';
         document.getElementById('callbackUrl').value = '';
         document.getElementById('generateBtn').disabled = false;
         document.getElementById('generateBtn').textContent = 'Generate Auth URL';
@@ -390,10 +244,10 @@ const clientScript = `
         document.getElementById('authUrlBtns').classList.add('hidden');
         await loadAccounts();
       } else {
-        resultEl.innerHTML = '<div class="error">' + (data.error || 'Exchange failed') + '</div>';
+        resultEl.innerHTML = '<div class="text-red-500 text-sm mt-2">' + (data.error || 'Exchange failed') + '</div>';
       }
     } catch (e) {
-      resultEl.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
+      resultEl.innerHTML = '<div class="text-red-500 text-sm mt-2">Error: ' + e.message + '</div>';
     }
   }
 
@@ -412,6 +266,28 @@ const clientScript = `
     document.getElementById('adminKeyInput').value = '';
   }
 
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return null;
+    const now = Date.now();
+    const diff = timestamp - now;
+    if (diff <= 0) return 'Now';
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return days + 'd ' + (hours % 24) + 'h';
+    if (hours > 0) return hours + 'h ' + mins + 'm';
+    return mins + 'm';
+  }
+
+  function getQuotaClass(fraction) {
+    if (fraction === null || fraction <= 0) return 'bg-red-600';
+    if (fraction <= 0.2) return 'bg-red-500';
+    if (fraction <= 0.5) return 'bg-amber-500';
+    return 'bg-green-500';
+  }
+
   loadAccounts();
 `
 
@@ -422,58 +298,113 @@ export const AuthPage: FC = () => {
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Antigravity Auth</title>
-        <style dangerouslySetInnerHTML={{ __html: styles }} />
+        <script src="https://cdn.tailwindcss.com"></script>
       </head>
-      <body>
-        <div class="container">
-          <h1>Antigravity Auth</h1>
-          <p class="subtitle">Multi-account Google OAuth token management</p>
+      <body class="bg-neutral-950 text-neutral-300 min-h-screen p-10 overflow-y-auto font-sans">
+        <div class="max-w-2xl w-full mx-auto bg-neutral-900 rounded-xl p-8 border border-neutral-800">
+          <h1 class="text-2xl font-semibold text-white mb-2">Antigravity Auth</h1>
+          <p class="text-neutral-500 mb-6">Multi-account Google OAuth token management</p>
 
-          <div id="loginSection" class="section hidden">
-            <div class="section-title">Admin Login</div>
-            <input type="password" id="adminKeyInput" placeholder="Enter Admin Key" />
-            <button class="btn-full" style="margin-top: 12px;" onclick="login()">Login</button>
+          <div id="loginSection" class="hidden mb-6 p-5 bg-neutral-950 rounded-lg border border-neutral-800">
+            <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-3">Admin Login</div>
+            <input
+              type="password"
+              id="adminKeyInput"
+              placeholder="Enter Admin Key"
+              class="w-full px-3 py-3 rounded-md border border-neutral-700 bg-neutral-900 text-neutral-300 text-sm font-mono focus:outline-none focus:border-blue-500"
+            />
+            <button
+              class="w-full mt-3 px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+              onclick="login()"
+            >
+              Login
+            </button>
           </div>
 
           <div id="mainContent">
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
-              <button class="btn-sm btn-secondary" onclick="logout()">Logout</button>
+            <div class="flex justify-end mb-4">
+              <button
+                class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
+                onclick="logout()"
+              >
+                Logout
+              </button>
             </div>
 
-            <div class="section">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <div class="section-title" style="margin-bottom: 0;">Accounts</div>
-                <button class="btn-sm btn-secondary" onclick="refreshAll()">Refresh All</button>
+            <div class="mb-6 p-5 bg-neutral-950 rounded-lg border border-neutral-800">
+              <div class="flex justify-between items-center mb-3">
+                <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Accounts</div>
+                <button
+                  class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
+                  onclick="refreshAll()"
+                >
+                  Refresh All
+                </button>
               </div>
-              <div id="status" class="status loading">
-                <span class="dot"></span>
+              <div
+                id="status"
+                class="flex items-center gap-2 p-3 rounded-md text-sm bg-blue-500/10 border border-blue-500/30 text-blue-500"
+              >
+                <span class="w-2 h-2 rounded-full bg-current"></span>
                 <span>Loading...</span>
               </div>
-              <div id="accountList" style="margin-top: 16px;"></div>
+              <div id="accountList" class="mt-4"></div>
             </div>
 
-            <div class="section">
-              <div class="section-title">Add Account</div>
-              
-              <div class="step">
-                <div class="step-num">1</div>
-                <div class="step-content">
-                  <p>Generate OAuth URL and open in browser</p>
-                  <button id="generateBtn" class="btn-full" onclick="generateAuthUrl()">Generate Auth URL</button>
-                  <div id="authUrlBox" class="url-box hidden"></div>
-                  <div id="authUrlBtns" class="btn-group hidden" style="margin-top: 8px;">
-                    <button class="btn-secondary" onclick="copyAuthUrl()">Copy</button>
-                    <button onclick="openAuthUrl()">Open in Browser</button>
+            <div class="p-5 bg-neutral-950 rounded-lg border border-neutral-800">
+              <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-4">Add Account</div>
+
+              <div class="flex gap-3 mb-4">
+                <div class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                  1
+                </div>
+                <div class="flex-1">
+                  <p class="text-neutral-400 text-sm mb-3">Generate OAuth URL and open in browser</p>
+                  <button
+                    id="generateBtn"
+                    class="w-full px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                    onclick="generateAuthUrl()"
+                  >
+                    Generate Auth URL
+                  </button>
+                  <div
+                    id="authUrlBox"
+                    class="hidden mt-3 p-3 bg-neutral-950 border border-neutral-700 rounded-md font-mono text-xs break-all max-h-24 overflow-y-auto"
+                  ></div>
+                  <div id="authUrlBtns" class="hidden flex gap-2 mt-2">
+                    <button
+                      class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
+                      onclick="copyAuthUrl()"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      class="px-3 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                      onclick="openAuthUrl()"
+                    >
+                      Open in Browser
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div class="step">
-                <div class="step-num">2</div>
-                <div class="step-content">
-                  <p>Paste the localhost callback URL here</p>
-                  <textarea id="callbackUrl" placeholder="http://localhost:9999/?state=...&code=..."></textarea>
-                  <button class="btn-full" style="margin-top: 12px;" onclick="exchangeToken()">Add Account</button>
+              <div class="flex gap-3">
+                <div class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                  2
+                </div>
+                <div class="flex-1">
+                  <p class="text-neutral-400 text-sm mb-3">Paste the localhost callback URL here</p>
+                  <textarea
+                    id="callbackUrl"
+                    placeholder="http://localhost:9999/?state=...&amp;code=..."
+                    class="w-full px-3 py-3 rounded-md border border-neutral-700 bg-neutral-900 text-neutral-300 text-sm font-mono focus:outline-none focus:border-blue-500 resize-y min-h-20"
+                  ></textarea>
+                  <button
+                    class="w-full mt-3 px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                    onclick="exchangeToken()"
+                  >
+                    Add Account
+                  </button>
                   <div id="exchangeResult"></div>
                 </div>
               </div>

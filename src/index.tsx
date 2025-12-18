@@ -418,6 +418,19 @@ app.get('/auth', (c) => {
   return c.html(<AuthPage />)
 })
 
+app.get('/admin/quota', async (c) => {
+  const adminKey = c.env.ADMIN_KEY
+  const authHeader = c.req.header('Authorization')
+  
+  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const { getAllAccountsQuota } = await import('./storage')
+  const quotas = await getAllAccountsQuota(c.env.ANTIGRAVITY_AUTH)
+  return c.json({ quotas, fetchedAt: Date.now() })
+})
+
 app.post('/auth/callback', async (c) => {
   const body = await c.req.json<{
     code: string
