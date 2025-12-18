@@ -30,7 +30,7 @@ import {
   AnthropicModelsListResponseSchema,
   AnthropicErrorSchema,
 } from './anthropic'
-import { getValidAccessToken, setStoredToken, handleTokenRefresh, type StoredToken } from './storage'
+import { getValidAccessToken, setStoredToken, handleTokenRefresh, markRateLimited, parseRateLimitDelay, getAllTokens, type StoredToken } from './storage'
 import { AuthPage } from './auth-ui'
 
 type Bindings = {
@@ -257,37 +257,66 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
     }, 404)
   }
 
-  const stored = await getValidAccessToken(c.env.DB, body.model)
-  if (!stored) {
-    return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
-  }
-  const accessToken = stored.accessToken
-  const projectId = stored.projectId
-  const tokenEmail = stored.email
+  const allTokens = await getAllTokens(c.env.DB)
+  const triedEmails: string[] = []
+  let lastError: Error | null = null
 
-  try {
-    if (body.stream) {
-      const stream = await handleChatCompletionStream(body, accessToken, projectId)
-      if (stream instanceof Response) return stream
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-        },
-      })
+  for (let attempt = 0; attempt < allTokens.length; attempt++) {
+    const stored = await getValidAccessToken(c.env.DB, body.model, triedEmails)
+    if (!stored) {
+      if (triedEmails.length > 0) {
+        return c.json({ error: 'All accounts rate limited', details: `Tried ${triedEmails.length} accounts` }, 429)
+      }
+      return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
     }
 
-    const result = await handleChatCompletion(body, accessToken, projectId)
-    if (result instanceof Response) return result
-    return c.json(result, 200)
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('429') && tokenEmail) {
-      const { markRateLimited } = await import('./storage')
-      await markRateLimited(c.env.DB, tokenEmail, body.model, 60000)
+    const { accessToken, projectId, email } = stored
+    triedEmails.push(email)
+
+    try {
+      if (body.stream) {
+        const stream = await handleChatCompletionStream(body, accessToken, projectId)
+        if (stream instanceof Response) {
+          if (stream.status === 429) {
+            const errorText = await stream.clone().text()
+            const delayMs = parseRateLimitDelay(errorText) ?? 60000
+            await markRateLimited(c.env.DB, email, body.model, delayMs)
+            continue
+          }
+          return stream
+        }
+        return new Response(stream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        })
+      }
+
+      const result = await handleChatCompletion(body, accessToken, projectId)
+      if (result instanceof Response) {
+        if (result.status === 429) {
+          const errorText = await result.clone().text()
+          const delayMs = parseRateLimitDelay(errorText) ?? 60000
+          await markRateLimited(c.env.DB, email, body.model, delayMs)
+          continue
+        }
+        return result
+      }
+      return c.json(result, 200)
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('429')) {
+        await markRateLimited(c.env.DB, email, body.model, 60000)
+        lastError = e
+        continue
+      }
+      throw e
     }
-    throw e
   }
+
+  if (lastError) throw lastError
+  return c.json({ error: 'All accounts exhausted' }, 429)
 })
 
 const modelsListRoute = createRoute({
@@ -502,41 +531,75 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
     }, 400)
   }
 
-  const stored = await getValidAccessToken(c.env.DB, body.model)
-  if (!stored) {
-    return c.json({
-      type: 'error',
-      error: { type: 'authentication_error', message: 'No valid token available' },
-    }, 401)
-  }
+  const allTokens = await getAllTokens(c.env.DB)
+  const triedEmails: string[] = []
+  let lastError: Error | null = null
 
-  const accessToken = stored.accessToken
-  const projectId = stored.projectId
-  const tokenEmail = stored.email
-
-  try {
-    if (body.stream) {
-      const stream = await handleAnthropicMessageStream(body, accessToken, projectId)
-      if (stream instanceof Response) return stream
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-        },
-      })
+  for (let attempt = 0; attempt < allTokens.length; attempt++) {
+    const stored = await getValidAccessToken(c.env.DB, body.model, triedEmails)
+    if (!stored) {
+      if (triedEmails.length > 0) {
+        return c.json({
+          type: 'error',
+          error: { type: 'rate_limit_error', message: `All ${triedEmails.length} accounts rate limited` },
+        }, 429)
+      }
+      return c.json({
+        type: 'error',
+        error: { type: 'authentication_error', message: 'No valid token available' },
+      }, 401)
     }
 
-    const result = await handleAnthropicMessage(body, accessToken, projectId)
-    if (result instanceof Response) return result
-    return c.json(result, 200)
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('429') && tokenEmail) {
-      const { markRateLimited } = await import('./storage')
-      await markRateLimited(c.env.DB, tokenEmail, body.model, 60000)
+    const { accessToken, projectId, email } = stored
+    triedEmails.push(email)
+
+    try {
+      if (body.stream) {
+        const stream = await handleAnthropicMessageStream(body, accessToken, projectId)
+        if (stream instanceof Response) {
+          if (stream.status === 429) {
+            const errorText = await stream.clone().text()
+            const delayMs = parseRateLimitDelay(errorText) ?? 60000
+            await markRateLimited(c.env.DB, email, body.model, delayMs)
+            continue
+          }
+          return stream
+        }
+        return new Response(stream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        })
+      }
+
+      const result = await handleAnthropicMessage(body, accessToken, projectId)
+      if (result instanceof Response) {
+        if (result.status === 429) {
+          const errorText = await result.clone().text()
+          const delayMs = parseRateLimitDelay(errorText) ?? 60000
+          await markRateLimited(c.env.DB, email, body.model, delayMs)
+          continue
+        }
+        return result
+      }
+      return c.json(result, 200)
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('429')) {
+        await markRateLimited(c.env.DB, email, body.model, 60000)
+        lastError = e
+        continue
+      }
+      throw e
     }
-    throw e
   }
+
+  if (lastError) throw lastError
+  return c.json({
+    type: 'error',
+    error: { type: 'rate_limit_error', message: 'All accounts exhausted' },
+  }, 429)
 })
 
 app.post('/admin/token', async (c) => {
