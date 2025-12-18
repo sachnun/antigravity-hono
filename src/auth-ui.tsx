@@ -42,11 +42,13 @@ const clientScript = `
       if (tokenRes.status === 401) {
         mainContent.classList.add('hidden');
         loginSection.classList.remove('hidden');
+        document.getElementById('logoutBtn').classList.add('hidden');
         return;
       }
       
       mainContent.classList.remove('hidden');
       loginSection.classList.add('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
       
       if (tokenRes.ok) {
         const tokenData = await tokenRes.json();
@@ -264,6 +266,7 @@ const clientScript = `
     localStorage.removeItem('adminKey');
     document.getElementById('mainContent').classList.add('hidden');
     document.getElementById('loginSection').classList.remove('hidden');
+    document.getElementById('logoutBtn').classList.add('hidden');
     document.getElementById('adminKeyInput').value = '';
   }
 
@@ -301,18 +304,29 @@ export const AuthPage: FC = () => {
         <title>Antigravity Auth</title>
         <script src="https://cdn.tailwindcss.com"></script>
       </head>
-      <body class="bg-neutral-950 text-neutral-300 min-h-screen p-10 overflow-y-auto font-sans">
-        <div class="max-w-2xl w-full mx-auto bg-neutral-900 rounded-xl p-8 border border-neutral-800">
-          <h1 class="text-2xl font-semibold text-white mb-2">Antigravity Auth</h1>
-          <p class="text-neutral-500 mb-6">Multi-account Google OAuth token management</p>
+      <body class="bg-neutral-950 text-neutral-300 min-h-screen p-6 overflow-y-auto font-sans">
+        <div class="max-w-5xl w-full mx-auto">
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <h1 class="text-2xl font-semibold text-white">Antigravity Auth</h1>
+              <p class="text-neutral-500 text-sm">Multi-account Google OAuth token management</p>
+            </div>
+            <button
+              id="logoutBtn"
+              class="hidden px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
+              onclick="logout()"
+            >
+              Logout
+            </button>
+          </div>
 
-          <div id="loginSection" class="hidden mb-6 p-5 bg-neutral-950 rounded-lg border border-neutral-800">
+          <div id="loginSection" class="hidden max-w-md mx-auto p-5 bg-neutral-900 rounded-lg border border-neutral-800">
             <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-3">Admin Login</div>
             <input
               type="password"
               id="adminKeyInput"
               placeholder="Enter Admin Key"
-              class="w-full px-3 py-3 rounded-md border border-neutral-700 bg-neutral-900 text-neutral-300 text-sm font-mono focus:outline-none focus:border-blue-500"
+              class="w-full px-3 py-3 rounded-md border border-neutral-700 bg-neutral-950 text-neutral-300 text-sm font-mono focus:outline-none focus:border-blue-500"
             />
             <button
               class="w-full mt-3 px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
@@ -322,17 +336,8 @@ export const AuthPage: FC = () => {
             </button>
           </div>
 
-          <div id="mainContent">
-            <div class="flex justify-end mb-4">
-              <button
-                class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
-                onclick="logout()"
-              >
-                Logout
-              </button>
-            </div>
-
-            <div class="mb-6 p-5 bg-neutral-950 rounded-lg border border-neutral-800">
+          <div id="mainContent" class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div class="lg:col-span-3 p-5 bg-neutral-900 rounded-lg border border-neutral-800">
               <div class="flex justify-between items-center mb-3">
                 <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Accounts</div>
                 <button
@@ -349,10 +354,10 @@ export const AuthPage: FC = () => {
                 <span class="w-2 h-2 rounded-full bg-current"></span>
                 <span>Loading...</span>
               </div>
-              <div id="accountList" class="mt-4"></div>
+              <div id="accountList" class="mt-4 max-h-[calc(100vh-280px)] overflow-y-auto"></div>
             </div>
 
-            <div class="p-5 bg-neutral-950 rounded-lg border border-neutral-800">
+            <div class="lg:col-span-2 p-5 bg-neutral-900 rounded-lg border border-neutral-800 h-fit lg:sticky lg:top-6">
               <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-4">Add Account</div>
 
               <div class="flex gap-3 mb-4">
@@ -360,30 +365,30 @@ export const AuthPage: FC = () => {
                   1
                 </div>
                 <div class="flex-1">
-                  <p class="text-neutral-400 text-sm mb-3">Generate OAuth URL and open in browser</p>
+                  <p class="text-neutral-400 text-sm mb-2">Generate OAuth URL</p>
                   <button
                     id="generateBtn"
-                    class="w-full px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                    class="w-full px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
                     onclick="generateAuthUrl()"
                   >
                     Generate Auth URL
                   </button>
                   <div
                     id="authUrlBox"
-                    class="hidden mt-3 p-3 bg-neutral-950 border border-neutral-700 rounded-md font-mono text-xs break-all max-h-24 overflow-y-auto"
+                    class="hidden mt-2 p-2 bg-neutral-950 border border-neutral-700 rounded-md font-mono text-xs break-all max-h-20 overflow-y-auto"
                   ></div>
                   <div id="authUrlBtns" class="hidden flex gap-2 mt-2">
                     <button
-                      class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
+                      class="flex-1 px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
                       onclick="copyAuthUrl()"
                     >
                       Copy
                     </button>
                     <button
-                      class="px-3 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                      class="flex-1 px-3 py-1.5 text-xs font-medium rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                       onclick="openAuthUrl()"
                     >
-                      Open in Browser
+                      Open
                     </button>
                   </div>
                 </div>
@@ -394,14 +399,14 @@ export const AuthPage: FC = () => {
                   2
                 </div>
                 <div class="flex-1">
-                  <p class="text-neutral-400 text-sm mb-3">Paste the localhost callback URL here</p>
+                  <p class="text-neutral-400 text-sm mb-2">Paste callback URL</p>
                   <textarea
                     id="callbackUrl"
                     placeholder="http://localhost:9999/?state=...&amp;code=..."
-                    class="w-full px-3 py-3 rounded-md border border-neutral-700 bg-neutral-900 text-neutral-300 text-sm font-mono focus:outline-none focus:border-blue-500 resize-y min-h-20"
+                    class="w-full px-3 py-2 rounded-md border border-neutral-700 bg-neutral-950 text-neutral-300 text-sm font-mono focus:outline-none focus:border-blue-500 resize-y min-h-16"
                   ></textarea>
                   <button
-                    class="w-full mt-3 px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                    class="w-full mt-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
                     onclick="exchangeToken()"
                   >
                     Add Account
