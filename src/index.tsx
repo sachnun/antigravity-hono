@@ -19,6 +19,17 @@ import {
   ChatCompletionResponseSchema,
   ModelsListResponseSchema,
 } from './openai'
+import {
+  handleAnthropicMessage,
+  handleAnthropicMessageStream,
+  listAnthropicModels,
+  getAnthropicModel,
+  isValidAnthropicModel,
+  AnthropicMessageRequestSchema,
+  AnthropicMessageResponseSchema,
+  AnthropicModelsListResponseSchema,
+  AnthropicErrorSchema,
+} from './anthropic'
 import { getValidAccessToken, setStoredToken, handleTokenRefresh, type StoredToken } from './storage'
 import { AuthPage } from './auth-ui'
 
@@ -92,6 +103,7 @@ app.doc('/openapi.json', {
   },
   tags: [
     { name: 'OpenAI Compatible', description: 'OpenAI-compatible chat completions API' },
+    { name: 'Anthropic Compatible', description: 'Anthropic-compatible messages API' },
     { name: 'Search', description: 'Google Search endpoints' },
   ],
 })
@@ -110,49 +122,93 @@ const chatCompletionsRoute = createRoute({
           schema: ChatCompletionRequestSchema,
           examples: {
             basic: {
-              summary: 'Basic',
+              summary: 'Basic message',
               value: {
-                model: 'gemini-3-pro-preview',
+                model: 'claude-sonnet-4-5',
                 messages: [{ role: 'user', content: 'Hello!' }],
               },
             },
-            streaming: {
-              summary: 'Streaming',
+            withSystem: {
+              summary: 'With system prompt',
               value: {
-                model: 'gemini-3-pro-preview',
-                messages: [{ role: 'user', content: 'Hello!' }],
+                model: 'claude-sonnet-4-5',
+                messages: [
+                  { role: 'system', content: 'You are a helpful assistant that speaks like a pirate.' },
+                  { role: 'user', content: 'Tell me about the ocean.' },
+                ],
+              },
+            },
+            streaming: {
+              summary: 'Streaming response',
+              value: {
+                model: 'claude-sonnet-4-5',
+                messages: [{ role: 'user', content: 'Write a short poem about coding.' }],
                 stream: true,
               },
             },
             thinking: {
-              summary: 'Thinking',
+              summary: 'With extended thinking',
               value: {
-                model: 'gemini-3-pro-preview',
-                messages: [{ role: 'user', content: 'What is 25 * 37?' }],
-                reasoning_effort: 'medium',
+                model: 'claude-sonnet-4-5',
+                messages: [{ role: 'user', content: 'Solve step by step: What is 847 * 239?' }],
+                reasoning_effort: 'high',
                 include_thoughts: true,
               },
             },
-            tools: {
-              summary: 'Tools',
+            multiTurn: {
+              summary: 'Multi-turn conversation',
               value: {
-                model: 'gemini-3-pro-preview',
+                model: 'claude-sonnet-4-5',
+                messages: [
+                  { role: 'user', content: 'My name is Alice.' },
+                  { role: 'assistant', content: 'Hello Alice! Nice to meet you.' },
+                  { role: 'user', content: 'What is my name?' },
+                ],
+              },
+            },
+            tools: {
+              summary: 'With tool/function calling',
+              value: {
+                model: 'claude-sonnet-4-5',
                 messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
                 tools: [{
                   type: 'function',
                   function: {
                     name: 'get_weather',
-                    description: 'Get weather in a location',
+                    description: 'Get the current weather in a given location',
                     parameters: {
                       type: 'object',
                       properties: {
-                        location: { type: 'string' },
+                        location: { type: 'string', description: 'City name' },
                       },
                       required: ['location'],
                     },
                   },
                 }],
                 tool_choice: 'auto',
+              },
+            },
+            withImage: {
+              summary: 'With image (base64)',
+              value: {
+                model: 'claude-sonnet-4-5',
+                messages: [{
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'image_url',
+                      image_url: { url: 'data:image/png;base64,<base64-encoded-image-data>' },
+                    },
+                    { type: 'text', text: 'What is in this image?' },
+                  ],
+                }],
+              },
+            },
+            geminiFlash: {
+              summary: 'Using Gemini Flash',
+              value: {
+                model: 'gemini-2.5-flash',
+                messages: [{ role: 'user', content: 'Hello!' }],
               },
             },
           },
@@ -293,6 +349,195 @@ app.openapi(modelRetrieveRoute, async (c) => {
 app.get('/', swaggerUI({ url: '/openapi.json' }))
 
 app.get('/v1', (c) => c.redirect('/'))
+
+const anthropicMessagesRoute = createRoute({
+  method: 'post',
+  path: '/v1/messages',
+  tags: ['Anthropic Compatible'],
+  summary: 'Create a message',
+  description: 'Send messages to Claude models using Anthropic API format',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: AnthropicMessageRequestSchema,
+          examples: {
+            basic: {
+              summary: 'Basic message',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [{ role: 'user', content: 'Hello!' }],
+              },
+            },
+            withSystem: {
+              summary: 'With system prompt',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                system: 'You are a helpful assistant that speaks like a pirate.',
+                messages: [{ role: 'user', content: 'Tell me about the ocean.' }],
+              },
+            },
+            thinking: {
+              summary: 'With extended thinking',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 16384,
+                messages: [{ role: 'user', content: 'Solve step by step: What is 847 * 239?' }],
+                thinking: { type: 'enabled', budget_tokens: 8192 },
+              },
+            },
+            streaming: {
+              summary: 'Streaming response',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                stream: true,
+                messages: [{ role: 'user', content: 'Write a short poem about coding.' }],
+              },
+            },
+            multiTurn: {
+              summary: 'Multi-turn conversation',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [
+                  { role: 'user', content: 'My name is Alice.' },
+                  { role: 'assistant', content: 'Hello Alice! Nice to meet you.' },
+                  { role: 'user', content: 'What is my name?' },
+                ],
+              },
+            },
+            withTools: {
+              summary: 'With tool use',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [{ role: 'user', content: 'What is the weather in Tokyo?' }],
+                tools: [
+                  {
+                    name: 'get_weather',
+                    description: 'Get the current weather in a given location',
+                    input_schema: {
+                      type: 'object',
+                      properties: {
+                        location: { type: 'string', description: 'City name' },
+                      },
+                      required: ['location'],
+                    },
+                  },
+                ],
+              },
+            },
+            withImage: {
+              summary: 'With image (base64)',
+              value: {
+                model: 'claude-sonnet-4-5',
+                max_tokens: 1024,
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      {
+                        type: 'image',
+                        source: {
+                          type: 'base64',
+                          media_type: 'image/png',
+                          data: '<base64-encoded-image-data>',
+                        },
+                      },
+                      { type: 'text', text: 'What is in this image?' },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': { schema: AnthropicMessageResponseSchema },
+        'text/event-stream': { schema: z.any() },
+      },
+      description: 'Message response (or SSE stream if stream=true)',
+    },
+    401: {
+      content: { 'application/json': { schema: AnthropicErrorSchema } },
+      description: 'Unauthorized',
+    },
+    400: {
+      content: { 'application/json': { schema: AnthropicErrorSchema } },
+      description: 'Bad request',
+    },
+  },
+})
+
+app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
+  const apiKey = c.env.API_KEY
+  const authHeader = c.req.header('Authorization')
+  const xApiKey = c.req.header('x-api-key')
+
+  if (apiKey) {
+    const providedKey = xApiKey ?? authHeader?.replace('Bearer ', '')
+    if (providedKey !== apiKey) {
+      return c.json({
+        type: 'error',
+        error: { type: 'authentication_error', message: 'Invalid API key' },
+      }, 401)
+    }
+  }
+
+  const body = c.req.valid('json')
+
+  if (!isValidAnthropicModel(body.model)) {
+    return c.json({
+      type: 'error',
+      error: { type: 'invalid_request_error', message: `Model '${body.model}' not found` },
+    }, 400)
+  }
+
+  const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
+  if (!stored) {
+    return c.json({
+      type: 'error',
+      error: { type: 'authentication_error', message: 'No valid token available' },
+    }, 401)
+  }
+
+  const accessToken = stored.accessToken
+  const projectId = stored.projectId
+  const tokenEmail = stored.email
+
+  try {
+    if (body.stream) {
+      const stream = await handleAnthropicMessageStream(body, accessToken, projectId)
+      if (stream instanceof Response) return stream
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      })
+    }
+
+    const result = await handleAnthropicMessage(body, accessToken, projectId)
+    if (result instanceof Response) return result
+    return c.json(result, 200)
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('429') && tokenEmail) {
+      const { markRateLimited } = await import('./storage')
+      await markRateLimited(c.env.ANTIGRAVITY_AUTH, tokenEmail, body.model, 60000)
+    }
+    throw e
+  }
+})
 
 app.post('/admin/token', async (c) => {
   const adminKey = c.env.ADMIN_KEY
