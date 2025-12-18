@@ -9,6 +9,15 @@ import {
   GROUP_DISPLAY_NAMES,
 } from './constants'
 
+const CACHE_TTL_MS = 30 * 1000
+let cachedTokens: StoredToken[] | null = null
+let cacheTimestamp = 0
+
+function invalidateCache(): void {
+  cachedTokens = null
+  cacheTimestamp = 0
+}
+
 export interface QuotaGroupInfo {
   group: string
   displayName: string
@@ -62,9 +71,16 @@ function getModelFamily(model: string): ModelFamily {
 }
 
 export async function getAllTokens(db: D1Database): Promise<StoredToken[]> {
+  const now = Date.now()
+  if (cachedTokens && now - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedTokens
+  }
+
   const d1 = drizzle(db)
   const rows = await d1.select().from(tokens)
-  return rows.map(tokenFromRow)
+  cachedTokens = rows.map(tokenFromRow)
+  cacheTimestamp = now
+  return cachedTokens
 }
 
 export async function getTokenForModel(db: D1Database, model: string): Promise<StoredToken | null> {
@@ -106,6 +122,7 @@ export async function markRateLimited(
     : { geminiRateLimitUntil: until, updatedAt: Date.now() }
 
   await d1.update(tokens).set(updateData).where(eq(tokens.email, email))
+  invalidateCache()
 }
 
 export async function setStoredToken(db: D1Database, token: StoredToken): Promise<void> {
@@ -137,11 +154,13 @@ export async function setStoredToken(db: D1Database, token: StoredToken): Promis
         updatedAt: Date.now(),
       },
     })
+  invalidateCache()
 }
 
 export async function deleteStoredToken(db: D1Database, email: string): Promise<void> {
   const d1 = drizzle(db)
   await d1.delete(tokens).where(eq(tokens.email, email))
+  invalidateCache()
 }
 
 export async function getValidAccessToken(
