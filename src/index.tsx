@@ -34,7 +34,7 @@ import { getValidAccessToken, setStoredToken, handleTokenRefresh, type StoredTok
 import { AuthPage } from './auth-ui'
 
 type Bindings = {
-  ANTIGRAVITY_AUTH: KVNamespace
+  DB: D1Database
   ADMIN_KEY?: string
   API_KEY?: string
 }
@@ -257,7 +257,7 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
     }, 404)
   }
 
-  const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
+  const stored = await getValidAccessToken(c.env.DB, body.model)
   if (!stored) {
     return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
   }
@@ -284,7 +284,7 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
   } catch (e) {
     if (e instanceof Error && e.message.includes('429') && tokenEmail) {
       const { markRateLimited } = await import('./storage')
-      await markRateLimited(c.env.ANTIGRAVITY_AUTH, tokenEmail, body.model, 60000)
+      await markRateLimited(c.env.DB, tokenEmail, body.model, 60000)
     }
     throw e
   }
@@ -502,7 +502,7 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
     }, 400)
   }
 
-  const stored = await getValidAccessToken(c.env.ANTIGRAVITY_AUTH, body.model)
+  const stored = await getValidAccessToken(c.env.DB, body.model)
   if (!stored) {
     return c.json({
       type: 'error',
@@ -533,7 +533,7 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
   } catch (e) {
     if (e instanceof Error && e.message.includes('429') && tokenEmail) {
       const { markRateLimited } = await import('./storage')
-      await markRateLimited(c.env.ANTIGRAVITY_AUTH, tokenEmail, body.model, 60000)
+      await markRateLimited(c.env.DB, tokenEmail, body.model, 60000)
     }
     throw e
   }
@@ -576,7 +576,7 @@ app.post('/admin/token', async (c) => {
     }
   }
 
-  await setStoredToken(c.env.ANTIGRAVITY_AUTH, token)
+  await setStoredToken(c.env.DB, token)
   return c.json({ success: true, email: token.email, expiresAt: token.expiresAt })
 })
 
@@ -589,7 +589,7 @@ app.get('/admin/token', async (c) => {
   }
 
   const { getAllTokens } = await import('./storage')
-  const tokens = await getAllTokens(c.env.ANTIGRAVITY_AUTH)
+  const tokens = await getAllTokens(c.env.DB)
   if (tokens.length === 0) {
     return c.json({ error: 'No token stored' }, 404)
   }
@@ -606,7 +606,7 @@ app.get('/admin/token/details', async (c) => {
   }
 
   const { getAllTokens } = await import('./storage')
-  const tokens = await getAllTokens(c.env.ANTIGRAVITY_AUTH)
+  const tokens = await getAllTokens(c.env.DB)
 
   if (tokens.length === 0) {
     return c.json({ error: 'No tokens stored' }, 404)
@@ -633,7 +633,7 @@ app.post('/admin/token/refresh', async (c) => {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 
-  const result = await handleTokenRefresh(c.env.ANTIGRAVITY_AUTH)
+  const result = await handleTokenRefresh(c.env.DB)
   if (!result.success) {
     return c.json({ error: result.errors.join(', ') }, 400)
   }
@@ -655,7 +655,7 @@ app.delete('/admin/token', async (c) => {
   }
 
   const { deleteStoredToken } = await import('./storage')
-  await deleteStoredToken(c.env.ANTIGRAVITY_AUTH, email)
+  await deleteStoredToken(c.env.DB, email)
   return c.json({ success: true })
 })
 
@@ -672,7 +672,7 @@ app.get('/admin/quota', async (c) => {
   }
 
   const { getAllAccountsQuota } = await import('./storage')
-  const quotas = await getAllAccountsQuota(c.env.ANTIGRAVITY_AUTH)
+  const quotas = await getAllAccountsQuota(c.env.DB)
   return c.json({ quotas, fetchedAt: Date.now() })
 })
 
@@ -702,7 +702,7 @@ app.post('/auth/callback', async (c) => {
     tier: result.tier,
   }
 
-  await setStoredToken(c.env.ANTIGRAVITY_AUTH, token)
+  await setStoredToken(c.env.DB, token)
   return c.json({ success: true, projectId: token.projectId, email: token.email, tier: token.tier, expiresAt: token.expiresAt })
 })
 
@@ -714,7 +714,7 @@ export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
-      handleTokenRefresh(env.ANTIGRAVITY_AUTH).then((result) => {
+      handleTokenRefresh(env.DB).then((result) => {
         console.log('Token refresh result:', result)
       })
     )
