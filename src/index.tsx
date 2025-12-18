@@ -22,14 +22,22 @@ import {
 import {
   handleAnthropicMessage,
   handleAnthropicMessageStream,
-  listAnthropicModels,
-  getAnthropicModel,
   isValidAnthropicModel,
   AnthropicMessageRequestSchema,
   AnthropicMessageResponseSchema,
-  AnthropicModelsListResponseSchema,
   AnthropicErrorSchema,
 } from './anthropic'
+import {
+  handleGeminiGenerateContent,
+  handleGeminiGenerateContentStream,
+  listGeminiModels,
+  getGeminiModel,
+  isValidGeminiModel,
+  GeminiGenerateContentRequestSchema,
+  GeminiGenerateContentResponseSchema,
+  GeminiModelsListResponseSchema,
+  GeminiErrorSchema,
+} from './gemini'
 import { getValidAccessToken, setStoredToken, handleTokenRefresh, type StoredToken } from './storage'
 import { AuthPage } from './auth-ui'
 
@@ -104,6 +112,7 @@ app.doc('/openapi.json', {
   tags: [
     { name: 'OpenAI Compatible', description: 'OpenAI-compatible chat completions API' },
     { name: 'Anthropic Compatible', description: 'Anthropic-compatible messages API' },
+    { name: 'Gemini Compatible', description: 'Gemini-compatible generateContent API' },
     { name: 'Search', description: 'Google Search endpoints' },
   ],
 })
@@ -537,6 +546,93 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
     }
     throw e
   }
+})
+
+app.post('/v1beta/models/:modelAction', async (c) => {
+  const modelAction = c.req.param('modelAction')
+  
+  const generateMatch = modelAction.match(/^(.+):generateContent$/)
+  const streamMatch = modelAction.match(/^(.+):streamGenerateContent$/)
+  
+  if (!generateMatch && !streamMatch) {
+    return c.json({
+      error: { code: 404, message: 'Not found', status: 'NOT_FOUND' },
+    }, 404)
+  }
+
+  const model = generateMatch ? generateMatch[1] : streamMatch![1]
+  const isStream = !!streamMatch
+
+  const apiKey = c.env.API_KEY
+  const authHeader = c.req.header('Authorization')
+  const xApiKey = c.req.header('x-goog-api-key')
+
+  if (apiKey) {
+    const providedKey = xApiKey ?? authHeader?.replace('Bearer ', '')
+    if (providedKey !== apiKey) {
+      return c.json({
+        error: { code: 401, message: 'Invalid API key', status: 'UNAUTHENTICATED' },
+      }, 401)
+    }
+  }
+
+  const body = await c.req.json()
+
+  if (!isValidGeminiModel(model)) {
+    return c.json({
+      error: { code: 404, message: `Model '${model}' not found`, status: 'NOT_FOUND' },
+    }, 404)
+  }
+
+  const stored = await getValidAccessToken(c.env.DB, model)
+  if (!stored) {
+    return c.json({
+      error: { code: 401, message: 'No valid token available', status: 'UNAUTHENTICATED' },
+    }, 401)
+  }
+
+  const accessToken = stored.accessToken
+  const projectId = stored.projectId
+  const tokenEmail = stored.email
+
+  try {
+    if (isStream) {
+      const stream = await handleGeminiGenerateContentStream(body, model, accessToken, projectId)
+      if (stream instanceof Response) return stream
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      })
+    }
+
+    const result = await handleGeminiGenerateContent(body, model, accessToken, projectId)
+    if (result instanceof Response) return result
+    return c.json(result, 200)
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('429') && tokenEmail) {
+      const { markRateLimited } = await import('./storage')
+      await markRateLimited(c.env.DB, tokenEmail, model, 60000)
+    }
+    throw e
+  }
+})
+
+app.get('/v1beta/models', async (c) => {
+  return c.json(listGeminiModels(), 200)
+})
+
+app.get('/v1beta/models/:model', async (c) => {
+  const model = c.req.param('model')
+  const result = getGeminiModel(model)
+  if (!result) {
+    return c.json({
+      error: { code: 404, message: `Model '${model}' not found`, status: 'NOT_FOUND' },
+    }, 404)
+  }
+  return c.json(result, 200)
 })
 
 app.post('/admin/token', async (c) => {
