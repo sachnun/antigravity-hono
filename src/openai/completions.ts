@@ -9,8 +9,11 @@ import type {
   Message,
 } from './schemas'
 
-const MAX_RETRIES = 3
-const MAX_RETRY_DELAY_MS = 5000
+export interface RateLimitInfo {
+  isRateLimited: boolean
+  retryDelayMs: number | null
+  errorText: string | null
+}
 
 function parseRateLimitError(text: string): string | null {
   try {
@@ -33,37 +36,13 @@ function parseDelaySeconds(delay: string): number {
   return match ? parseFloat(match[1]) : 0
 }
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit
-): Promise<Response> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const response = await fetch(url, options)
-
-    if (response.status !== 429) {
-      return response
-    }
-
-    const errorText = await response.text()
-    const retryDelay = parseRateLimitError(errorText)
-
-    if (!retryDelay) {
-      throw new Error(`Rate limited: ${errorText}`)
-    }
-
-    const delayMs = parseDelaySeconds(retryDelay) * 1000
-
-    if (attempt < MAX_RETRIES - 1 && delayMs > 0 && delayMs <= MAX_RETRY_DELAY_MS) {
-      await sleep(delayMs)
-      continue
-    }
-
-    throw new Error(`Rate limited after ${MAX_RETRIES} retries`)
+export function extractRateLimitInfo(response: Response, errorText: string): RateLimitInfo {
+  if (response.status !== 429) {
+    return { isRateLimited: false, retryDelayMs: null, errorText: null }
   }
-
-  throw new Error('Rate limited after max retries')
+  const retryDelay = parseRateLimitError(errorText)
+  const retryDelayMs = retryDelay ? parseDelaySeconds(retryDelay) * 1000 : null
+  return { isRateLimited: true, retryDelayMs, errorText }
 }
 
 const MODEL_ALIASES: Record<string, string> = {
@@ -622,7 +601,7 @@ async function collectStreamingResponse(
 ): Promise<ChatCompletionResponse> {
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
 
-  const response = await fetchWithRetry(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -802,7 +781,7 @@ export async function handleChatCompletion(
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:generateContent`
 
-  const response = await fetchWithRetry(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -882,7 +861,7 @@ export async function handleChatCompletionStream(
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
 
-  const response = await fetchWithRetry(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
