@@ -59,20 +59,15 @@ export function listGeminiModels(): { models: GeminiModel[] } {
 }
 
 export function getGeminiModel(modelId: string): GeminiModel | undefined {
-  const fullName = modelId.startsWith('models/') ? modelId : `models/${modelId}`
-  const model = GEMINI_MODELS.find(m => m.name === fullName)
-  if (model) return model
-  return SHORT_NAME_MAP.get(modelId)
+  const normalized = modelId.replace(/^models\//, '')
+  return SHORT_NAME_MAP.get(normalized)
 }
 
 export function isValidGeminiModel(modelId: string): boolean {
-  const fullName = modelId.startsWith('models/') ? modelId : `models/${modelId}`
-  return MODEL_NAME_SET.has(fullName) || SHORT_NAME_MAP.has(modelId)
+  const normalized = modelId.replace(/^models\//, '')
+  return SHORT_NAME_MAP.has(normalized)
 }
 
 export function resolveGeminiModelName(modelId: string): string {
-  if (modelId.startsWith('models/')) {
-    return modelId.replace('models/', '')
-  }
-  return modelId
+  return modelId.replace(/^models\//, '')
 }
