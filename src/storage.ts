@@ -214,7 +214,7 @@ export async function fetchQuotaFromApi(
   accessToken: string,
   projectId: string
 ): Promise<{ status: 'success' | 'error'; error?: string; models: Record<string, { remainingFraction: number | null; resetTime: string | null; resetTimestamp: number | null }> }> {
-  const url = `${CODE_ASSIST_ENDPOINT}:fetchAvailableModels`
+  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:fetchAvailableModels`
 
   const response = await fetch(url, {
     method: 'POST',
