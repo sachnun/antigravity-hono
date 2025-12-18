@@ -660,34 +660,6 @@ app.get('/admin/token', async (c) => {
   return c.json({ hasToken: true, count: tokens.length })
 })
 
-app.get('/admin/token/details', async (c) => {
-  const adminKey = c.env.ADMIN_KEY
-  const authHeader = c.req.header('Authorization')
-  
-  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
-  const { getAllTokens } = await import('./storage')
-  const tokens = await getAllTokens(c.env.DB)
-
-  if (tokens.length === 0) {
-    return c.json({ error: 'No tokens stored' }, 404)
-  }
-
-  return c.json({
-    tokens: tokens.map(t => ({
-      email: t.email,
-      projectId: t.projectId,
-      tier: t.tier,
-      accessToken: t.accessToken,
-      refreshToken: t.refreshToken,
-      expiresAt: t.expiresAt,
-      rateLimitUntil: t.rateLimitUntil,
-    })),
-  })
-})
-
 app.post('/admin/token/refresh', async (c) => {
   const adminKey = c.env.ADMIN_KEY
   const authHeader = c.req.header('Authorization')
@@ -726,12 +698,12 @@ app.get('/auth', (c) => {
   return c.html(<AuthPage />)
 })
 
-app.get('/admin/quota', async (c) => {
+app.get('/admin/accounts', async (c) => {
   const adminKey = c.env.ADMIN_KEY
   const authHeader = c.req.header('Authorization')
   const isAdmin = !adminKey || authHeader === `Bearer ${adminKey}`
 
-  const { getAllAccountsQuota } = await import('./storage')
+  const { getAllTokens, getAllAccountsQuota } = await import('./storage')
   const quotas = await getAllAccountsQuota(c.env.DB)
 
   const maskEmail = (email: string) => {
@@ -741,11 +713,26 @@ app.get('/admin/quota', async (c) => {
     return `${masked}@${domain}`
   }
 
-  const result = isAdmin
-    ? quotas
-    : quotas.map((q) => ({ ...q, email: maskEmail(q.email) }))
+  const quotaByEmail = Object.fromEntries(quotas.map((q) => [q.email, q]))
 
-  return c.json({ quotas: result, fetchedAt: Date.now(), isAdmin })
+  if (isAdmin) {
+    const tokens = await getAllTokens(c.env.DB)
+    const accounts = tokens.map((t) => ({
+      email: t.email,
+      projectId: t.projectId,
+      tier: t.tier,
+      expiresAt: t.expiresAt,
+      rateLimitUntil: t.rateLimitUntil,
+      quota: quotaByEmail[t.email] || null,
+    }))
+    return c.json({ accounts, isAdmin, fetchedAt: Date.now() })
+  }
+
+  const accounts = quotas.map((q) => ({
+    email: maskEmail(q.email),
+    quota: q,
+  }))
+  return c.json({ accounts, isAdmin, fetchedAt: Date.now() })
 })
 
 app.post('/auth/callback', async (c) => {

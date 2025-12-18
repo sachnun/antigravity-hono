@@ -14,13 +14,13 @@ type Quota = {
   error?: string
 }
 
-type Token = {
+type Account = {
   email: string
   projectId?: string
-  expiresAt?: number
-  lastUsed?: number
   tier?: string
+  expiresAt?: number
   rateLimitUntil?: { gemini?: number; claude?: number }
+  quota?: Quota | null
 }
 
 const getAuthHeaders = (): Record<string, string> => {
@@ -90,65 +90,59 @@ const QuotaBar = ({ group }: { group: QuotaGroup }) => {
 }
 
 const AccountCard = ({
-  token,
-  quota,
+  account,
   isAdmin,
   onDelete,
 }: {
-  token?: Token
-  quota?: Quota
+  account: Account
   isAdmin: boolean
   onDelete?: (email: string) => void
 }) => {
-  const email = token?.email || quota?.email || ''
-  const displayEmail = isAdmin ? email : maskEmail(email)
+  const email = account.email
+  const quota = account.quota
 
-  const geminiRL = token?.rateLimitUntil?.gemini
-  const claudeRL = token?.rateLimitUntil?.claude
+  const geminiRL = account.rateLimitUntil?.gemini
+  const claudeRL = account.rateLimitUntil?.claude
   const hasRL = (geminiRL && Date.now() < geminiRL) || (claudeRL && Date.now() < claudeRL)
 
-  const expiry = token ? formatExpiry(token.expiresAt) : null
+  const expiry = account.expiresAt ? formatExpiry(account.expiresAt) : null
 
   const tierBadge = () => {
-    if (!token?.tier || token.tier === 'unknown') return null
-    const isPro = token.tier.toLowerCase().includes('pro') || token.tier === 'standard-tier'
-    const isFree = token.tier === 'free-tier'
+    if (!account.tier || account.tier === 'unknown') return null
+    const isPro = account.tier.toLowerCase().includes('pro') || account.tier === 'standard-tier'
+    const isFree = account.tier === 'free-tier'
     const cls = isPro ? 'bg-green-600' : isFree ? 'bg-blue-600' : 'bg-neutral-600'
-    const label = isPro ? 'PRO' : isFree ? 'FREE' : token.tier.toUpperCase()
+    const label = isPro ? 'PRO' : isFree ? 'FREE' : account.tier.toUpperCase()
     return <span class={`px-2 py-0.5 rounded text-xs font-semibold text-white ${cls}`}>{label}</span>
   }
 
   return (
     <div class={`bg-neutral-900 border rounded-lg p-4 mb-3 ${hasRL ? 'border-amber-500 bg-amber-500/5' : 'border-neutral-800'}`}>
       <div class="flex justify-between items-center mb-3">
-        <span class="font-semibold text-white text-sm">{displayEmail}</span>
+        <span class="font-semibold text-white text-sm">{email}</span>
         <div class="flex gap-2">
           {tierBadge()}
           {hasRL && <span class="bg-amber-500 text-black px-2 py-0.5 rounded text-xs font-semibold">RATE LIMITED</span>}
         </div>
       </div>
 
-      {isAdmin && token && (
+      {isAdmin && account.projectId && (
         <div class="text-xs text-neutral-500 space-y-1">
           <div class="flex justify-between">
             <span>Project ID</span>
-            <span>{token.projectId || 'N/A'}</span>
+            <span>{account.projectId}</span>
           </div>
-          <div class="flex justify-between">
-            <span>Expires</span>
-            <span class={expiry?.cls}>{expiry?.text}</span>
-          </div>
-          {token.lastUsed && (
+          {expiry && (
             <div class="flex justify-between">
-              <span>Last Used</span>
-              <span>{new Date(token.lastUsed).toLocaleTimeString()}</span>
+              <span>Expires</span>
+              <span class={expiry.cls}>{expiry.text}</span>
             </div>
           )}
         </div>
       )}
 
       {quota?.status === 'success' && quota.groups && (
-        <div class={`space-y-3 ${isAdmin && token ? 'mt-4' : ''}`}>
+        <div class={`space-y-3 ${isAdmin && account.projectId ? 'mt-4' : ''}`}>
           {quota.groups.map((group) => (
             <QuotaBar group={group} />
           ))}
@@ -323,33 +317,18 @@ const AddAccountForm = ({ onSuccess }: { onSuccess: () => void }) => {
 
 const App = () => {
   const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem('adminKey'))
-  const [tokens, setTokens] = useState<Token[]>([])
-  const [quotas, setQuotas] = useState<Quota[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   const loadAccounts = async () => {
     try {
-      const [tokenRes, quotaRes] = await Promise.all([
-        fetch('/admin/token/details', { headers: getAuthHeaders() }),
-        fetch('/admin/quota', { headers: getAuthHeaders() }),
-      ])
-
-      const isAdminNow = tokenRes.status !== 401
-      setIsAdmin(isAdminNow)
-
-      const quotaData = (await quotaRes.json()) as { quotas?: Quota[] }
-      setQuotas(quotaData.quotas || [])
-
-      if (isAdminNow && tokenRes.ok) {
-        const tokenData = (await tokenRes.json()) as { tokens?: Token[] }
-        setTokens(tokenData.tokens || [])
-      } else {
-        setTokens([])
-      }
+      const res = await fetch('/admin/accounts', { headers: getAuthHeaders() })
+      const data = (await res.json()) as { accounts?: Account[]; isAdmin?: boolean }
+      setAccounts(data.accounts || [])
+      setIsAdmin(data.isAdmin ?? false)
     } catch {
-      setTokens([])
-      setQuotas([])
+      setAccounts([])
     }
     setLoading(false)
   }
@@ -403,9 +382,6 @@ const App = () => {
     setRefreshing(false)
   }
 
-  const quotaByEmail = Object.fromEntries(quotas.map((q) => [q.email, q]))
-  const accountCount = isAdmin ? tokens.length : quotas.length
-
   return (
     <div class="max-w-5xl w-full mx-auto">
       <div class="flex justify-between items-center mb-6">
@@ -446,21 +422,18 @@ const App = () => {
           ) : (
             <div class="flex items-center gap-2 p-3 rounded-md text-sm bg-green-500/10 border border-green-500/30 text-green-500">
               <span class="w-2 h-2 rounded-full bg-current" />
-              <span>{accountCount} account(s) {isAdmin ? 'configured' : 'available'}</span>
+              <span>{accounts.length} account(s) {isAdmin ? 'configured' : 'available'}</span>
             </div>
           )}
 
           <div class="mt-4 max-h-[calc(100vh-280px)] overflow-y-auto">
-            {isAdmin
-              ? tokens.map((token) => (
-                  <AccountCard
-                    token={token}
-                    quota={quotaByEmail[token.email]}
-                    isAdmin={true}
-                    onDelete={handleDelete}
-                  />
-                ))
-              : quotas.map((quota) => <AccountCard quota={quota} isAdmin={false} />)}
+            {accounts.map((account) => (
+              <AccountCard
+                account={account}
+                isAdmin={isAdmin}
+                onDelete={isAdmin ? handleDelete : undefined}
+              />
+            ))}
           </div>
         </div>
 
