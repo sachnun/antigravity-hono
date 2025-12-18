@@ -593,19 +593,10 @@ app.post('/v1beta/models/:modelAction', async (c) => {
 
   try {
     if (isStream) {
-      const stream = await handleGeminiGenerateContentStream(body, model, accessToken, projectId)
-      if (stream instanceof Response) return stream
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-        },
-      })
+      return await handleGeminiGenerateContentStream(body, model, accessToken, projectId)
     }
 
-    const result = await handleGeminiGenerateContent(body, model, accessToken, projectId)
-    return result
+    return await handleGeminiGenerateContent(body, model, accessToken, projectId)
   } catch (e) {
     if (e instanceof Error && e.message.includes('429') && tokenEmail) {
       const { markRateLimited } = await import('./storage')

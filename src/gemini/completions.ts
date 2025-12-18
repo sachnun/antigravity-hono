@@ -4,50 +4,9 @@ import {
 } from '../constants'
 import { resolveGeminiModelName } from './models'
 
-const MAX_RETRIES = 3
-const MAX_RETRY_DELAY_MS = 5000
-
 const INTERNAL_MODEL_MAP: Record<string, string> = {
   'claude-opus-4-5': 'claude-opus-4-5-thinking',
   'gemini-3-pro-preview': 'gemini-3-pro-low',
-}
-
-function parseRateLimitError(text: string): string | null {
-  try {
-    const data = JSON.parse(text)
-    const details = data.error?.details ?? []
-    for (const detail of details) {
-      if (detail.retryDelay) return detail.retryDelay
-    }
-    if (data.error?.quotaResetDelay) return data.error.quotaResetDelay
-  } catch {}
-  return null
-}
-
-function parseDelaySeconds(delay: string): number {
-  const match = delay.match(/^([\d.]+)s?$/)
-  return match ? parseFloat(match[1]) : 0
-}
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const response = await fetch(url, options)
-    if (response.status !== 429) return response
-
-    const errorText = await response.text()
-    const retryDelay = parseRateLimitError(errorText)
-    if (!retryDelay) throw new Error(`Rate limited: ${errorText}`)
-
-    const delayMs = parseDelaySeconds(retryDelay) * 1000
-    if (attempt < MAX_RETRIES - 1 && delayMs > 0 && delayMs <= MAX_RETRY_DELAY_MS) {
-      await sleep(delayMs)
-      continue
-    }
-    throw new Error(`Rate limited after ${MAX_RETRIES} retries`)
-  }
-  throw new Error('Rate limited after max retries')
 }
 
 function generateRequestId(): string {
@@ -73,7 +32,7 @@ export async function handleGeminiGenerateContent(
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:generateContent`
 
-  const response = await fetchWithRetry(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -83,23 +42,9 @@ export async function handleGeminiGenerateContent(
     body: JSON.stringify(wrappedBody),
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    return new Response(JSON.stringify({
-      error: {
-        code: response.status,
-        message: errorText,
-        status: 'INVALID_ARGUMENT',
-      },
-    }), {
-      status: response.status,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const data = await response.json() as { response?: unknown }
-  return new Response(JSON.stringify(data.response ?? data), {
-    status: 200,
+  const data = await response.json()
+  return new Response(JSON.stringify(data), {
+    status: response.status,
     headers: { 'Content-Type': 'application/json' },
   })
 }
@@ -109,7 +54,7 @@ export async function handleGeminiGenerateContentStream(
   modelId: string,
   accessToken: string,
   projectId: string
-): Promise<ReadableStream<Uint8Array> | Response> {
+): Promise<Response> {
   const modelName = resolveGeminiModelName(modelId)
   const effectiveModel = INTERNAL_MODEL_MAP[modelName] ?? modelName
 
@@ -123,7 +68,7 @@ export async function handleGeminiGenerateContentStream(
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
 
-  const response = await fetchWithRetry(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       ...CODE_ASSIST_HEADERS,
@@ -134,50 +79,12 @@ export async function handleGeminiGenerateContentStream(
     body: JSON.stringify(wrappedBody),
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    return new Response(JSON.stringify({
-      error: {
-        code: response.status,
-        message: errorText,
-        status: 'INVALID_ARGUMENT',
-      },
-    }), {
-      status: response.status,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const decoder = new TextDecoder()
-  const encoder = new TextEncoder()
-  let buffer = ''
-
-  const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      buffer += decoder.decode(chunk, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue
-        const json = line.slice(5).trim()
-        if (!json || json === '[DONE]') continue
-
-        try {
-          let parsed = JSON.parse(json) as unknown
-          if (Array.isArray(parsed)) parsed = parsed[0]
-          if (!parsed || typeof parsed !== 'object') continue
-
-          const data = parsed as { response?: unknown }
-          const output = data.response ?? data
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(output)}\n\n`))
-        } catch {}
-      }
-    },
-    flush(controller) {
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+  return new Response(response.body, {
+    status: response.status,
+    headers: {
+      'Content-Type': response.headers.get('Content-Type') ?? 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     },
   })
-
-  return response.body!.pipeThrough(transformStream)
 }
