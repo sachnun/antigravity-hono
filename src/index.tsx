@@ -83,7 +83,7 @@ app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
   description: 'API Key for chat completions',
 })
 
-app.doc('/doc', {
+app.doc('/openapi.json', {
   openapi: '3.0.0',
   info: {
     version: '1.0.0',
@@ -290,7 +290,9 @@ app.openapi(modelRetrieveRoute, async (c) => {
   return c.json(result, 200)
 })
 
-app.get('/swagger', swaggerUI({ url: '/doc' }))
+app.get('/', swaggerUI({ url: '/openapi.json' }))
+
+app.get('/v1', (c) => c.redirect('/'))
 
 app.post('/admin/token', async (c) => {
   const adminKey = c.env.ADMIN_KEY
@@ -443,15 +445,6 @@ app.post('/auth/callback', async (c) => {
 
   await setStoredToken(c.env.ANTIGRAVITY_AUTH, token)
   return c.json({ success: true, projectId: token.projectId, email: token.email, expiresAt: token.expiresAt })
-})
-
-app.get('/', (c) => {
-  return c.json({
-    name: 'Antigravity API',
-    version: '1.0.0',
-    docs: '/swagger',
-    openapi: '/doc',
-  })
 })
 
 app.onError((err, c) => {
