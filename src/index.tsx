@@ -729,14 +729,23 @@ app.get('/auth', (c) => {
 app.get('/admin/quota', async (c) => {
   const adminKey = c.env.ADMIN_KEY
   const authHeader = c.req.header('Authorization')
-  
-  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
+  const isAdmin = !adminKey || authHeader === `Bearer ${adminKey}`
 
   const { getAllAccountsQuota } = await import('./storage')
   const quotas = await getAllAccountsQuota(c.env.DB)
-  return c.json({ quotas, fetchedAt: Date.now() })
+
+  const maskEmail = (email: string) => {
+    const [local, domain] = email.split('@')
+    if (!domain) return email
+    const masked = local.length <= 2 ? local[0] + '***' : local.slice(0, 2) + '***'
+    return `${masked}@${domain}`
+  }
+
+  const result = isAdmin
+    ? quotas
+    : quotas.map((q) => ({ ...q, email: maskEmail(q.email) }))
+
+  return c.json({ quotas: result, fetchedAt: Date.now(), isAdmin })
 })
 
 app.post('/auth/callback', async (c) => {
