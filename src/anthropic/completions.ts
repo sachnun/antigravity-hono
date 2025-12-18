@@ -114,6 +114,21 @@ function hasTurnStartThinking(contents: GeminiContent[]): boolean {
   return false
 }
 
+function hasValidThoughtSignature(contents: GeminiContent[]): boolean {
+  for (let i = contents.length - 1; i >= 0; i--) {
+    const msg = contents[i]
+    if (msg.role === 'model') {
+      for (const part of msg.parts) {
+        if (part.functionCall && part.thoughtSignature && part.thoughtSignature !== 'skip_thought_signature_validator') {
+          return true
+        }
+      }
+      break
+    }
+  }
+  return false
+}
+
 function sanitizeThinkingForClaude(contents: GeminiContent[], thinkingEnabled: boolean): GeminiContent[] {
   if (!thinkingEnabled) return contents
   
@@ -122,6 +137,9 @@ function sanitizeThinkingForClaude(contents: GeminiContent[], thinkingEnabled: b
   
   const hasThinking = hasTurnStartThinking(contents)
   if (hasThinking) return contents
+  
+  const hasSignature = hasValidThoughtSignature(contents)
+  if (hasSignature) return contents
   
   let toolResultCount = 0
   for (let i = contents.length - 1; i >= 0; i--) {

@@ -18,6 +18,7 @@ const MessageSchema = z.object({
       name: z.string(),
       arguments: z.string(),
     }),
+    thought_signature: z.string().optional(),
   })).optional(),
   tool_call_id: z.string().optional(),
 })
@@ -106,6 +107,7 @@ const ChoiceMessageSchema = z.object({
       name: z.string(),
       arguments: z.string(),
     }),
+    thought_signature: z.string().optional(),
   })).optional(),
   refusal: z.string().nullable().optional(),
 })
