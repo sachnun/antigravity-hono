@@ -1,5 +1,7 @@
 # Antigravity Hono
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/daku/antigravity-hono)
+
 OpenAI and Anthropic compatible API proxy powered by Google Antigravity.
 
 ## Setup
