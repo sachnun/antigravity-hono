@@ -1,4 +1,5 @@
 import type { AnthropicModelInfo, AnthropicModelsListResponse } from './schemas'
+import { MODEL_ALIASES } from '../constants'
 
 export const ANTHROPIC_MODELS: AnthropicModelInfo[] = [
   {
@@ -14,13 +15,6 @@ export const ANTHROPIC_MODELS: AnthropicModelInfo[] = [
     created_at: '2025-11-01T00:00:00Z',
   },
 ]
-
-const MODEL_ALIASES: Record<string, string> = {
-  'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5',
-  'claude-4-sonnet': 'claude-sonnet-4-5',
-  'claude-opus-4-5-20251101': 'claude-opus-4-5',
-  'claude-4-opus': 'claude-opus-4-5',
-}
 
 export function resolveModelAlias(model: string): string {
   return MODEL_ALIASES[model] ?? model
