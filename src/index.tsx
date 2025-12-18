@@ -33,10 +33,6 @@ import {
   listGeminiModels,
   getGeminiModel,
   isValidGeminiModel,
-  GeminiGenerateContentRequestSchema,
-  GeminiGenerateContentResponseSchema,
-  GeminiModelsListResponseSchema,
-  GeminiErrorSchema,
 } from './gemini'
 import { getValidAccessToken, setStoredToken, handleTokenRefresh, type StoredToken } from './storage'
 import { AuthPage } from './auth-ui'
@@ -609,8 +605,7 @@ app.post('/v1beta/models/:modelAction', async (c) => {
     }
 
     const result = await handleGeminiGenerateContent(body, model, accessToken, projectId)
-    if (result instanceof Response) return result
-    return c.json(result, 200)
+    return result
   } catch (e) {
     if (e instanceof Error && e.message.includes('429') && tokenEmail) {
       const { markRateLimited } = await import('./storage')

@@ -2,7 +2,6 @@ import {
   CODE_ASSIST_ENDPOINT,
   CODE_ASSIST_HEADERS,
 } from '../constants'
-import type { GeminiGenerateContentRequest, GeminiGenerateContentResponse } from './schemas'
 import { resolveGeminiModelName } from './models'
 
 const MAX_RETRIES = 3
@@ -55,89 +54,21 @@ function generateRequestId(): string {
   return crypto.randomUUID()
 }
 
-interface InternalResponse {
-  response?: {
-    candidates?: Array<{
-      content?: {
-        role?: string
-        parts?: Array<{
-          text?: string
-          thought?: boolean
-          thoughtSignature?: string
-          functionCall?: { name: string; args: Record<string, unknown> }
-        }>
-      }
-      finishReason?: string
-    }>
-    usageMetadata?: {
-      promptTokenCount?: number
-      candidatesTokenCount?: number
-      totalTokenCount?: number
-      thoughtsTokenCount?: number
-      cachedContentTokenCount?: number
-    }
-  }
-  error?: { code?: number; message?: string; status?: string }
-}
-
-function convertInternalToGemini(data: InternalResponse): GeminiGenerateContentResponse {
-  const response = data.response
-  const candidates = response?.candidates?.map((candidate, index) => ({
-    content: {
-      role: candidate.content?.role ?? 'model',
-      parts: candidate.content?.parts?.map(part => ({
-        text: part.text,
-        thought: part.thought,
-        thoughtSignature: part.thoughtSignature,
-        functionCall: part.functionCall,
-      })) ?? [],
-    },
-    finishReason: candidate.finishReason,
-    index,
-  })) ?? []
-
-  return {
-    candidates,
-    usageMetadata: response?.usageMetadata ? {
-      promptTokenCount: response.usageMetadata.promptTokenCount,
-      candidatesTokenCount: response.usageMetadata.candidatesTokenCount,
-      totalTokenCount: response.usageMetadata.totalTokenCount,
-      thoughtsTokenCount: response.usageMetadata.thoughtsTokenCount,
-      cachedContentTokenCount: response.usageMetadata.cachedContentTokenCount,
-    } : undefined,
-  }
-}
-
 export async function handleGeminiGenerateContent(
-  request: GeminiGenerateContentRequest,
+  request: Record<string, unknown>,
   modelId: string,
   accessToken: string,
   projectId: string
-): Promise<GeminiGenerateContentResponse | Response> {
+): Promise<Response> {
   const modelName = resolveGeminiModelName(modelId)
   const effectiveModel = INTERNAL_MODEL_MAP[modelName] ?? modelName
-
-  const geminiRequest: Record<string, unknown> = {
-    contents: request.contents,
-    generationConfig: request.generationConfig,
-  }
-
-  if (request.systemInstruction) {
-    geminiRequest.systemInstruction = request.systemInstruction
-  }
-  if (request.tools) {
-    geminiRequest.tools = request.tools
-  }
-  if (request.safetySettings) {
-    geminiRequest.safetySettings = request.safetySettings
-  }
 
   const wrappedBody = {
     project: projectId,
     model: effectiveModel,
     userAgent: 'antigravity',
     requestId: generateRequestId(),
-    request: { ...geminiRequest, sessionId: generateRequestId() },
+    request: { ...request, sessionId: generateRequestId() },
   }
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:generateContent`
@@ -158,7 +89,7 @@ export async function handleGeminiGenerateContent(
       error: {
         code: response.status,
         message: errorText,
-        status: 'INTERNAL',
+        status: 'INVALID_ARGUMENT',
       },
     }), {
       status: response.status,
@@ -166,12 +97,15 @@ export async function handleGeminiGenerateContent(
     })
   }
 
-  const data = await response.json() as InternalResponse
-  return convertInternalToGemini(data)
+  const data = await response.json() as { response?: unknown }
+  return new Response(JSON.stringify(data.response ?? data), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 export async function handleGeminiGenerateContentStream(
-  request: GeminiGenerateContentRequest,
+  request: Record<string, unknown>,
   modelId: string,
   accessToken: string,
   projectId: string
@@ -179,27 +113,12 @@ export async function handleGeminiGenerateContentStream(
   const modelName = resolveGeminiModelName(modelId)
   const effectiveModel = INTERNAL_MODEL_MAP[modelName] ?? modelName
 
-  const geminiRequest: Record<string, unknown> = {
-    contents: request.contents,
-    generationConfig: request.generationConfig,
-  }
-
-  if (request.systemInstruction) {
-    geminiRequest.systemInstruction = request.systemInstruction
-  }
-  if (request.tools) {
-    geminiRequest.tools = request.tools
-  }
-  if (request.safetySettings) {
-    geminiRequest.safetySettings = request.safetySettings
-  }
-
   const wrappedBody = {
     project: projectId,
     model: effectiveModel,
     userAgent: 'antigravity',
     requestId: generateRequestId(),
-    request: { ...geminiRequest, sessionId: generateRequestId() },
+    request: { ...request, sessionId: generateRequestId() },
   }
 
   const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
@@ -221,7 +140,7 @@ export async function handleGeminiGenerateContentStream(
       error: {
         code: response.status,
         message: errorText,
-        status: 'INTERNAL',
+        status: 'INVALID_ARGUMENT',
       },
     }), {
       status: response.status,
@@ -229,9 +148,8 @@ export async function handleGeminiGenerateContentStream(
     })
   }
 
-  const encoder = new TextEncoder()
   const decoder = new TextDecoder()
-
+  const encoder = new TextEncoder()
   let buffer = ''
 
   const transformStream = new TransformStream<Uint8Array, Uint8Array>({
@@ -250,9 +168,9 @@ export async function handleGeminiGenerateContentStream(
           if (Array.isArray(parsed)) parsed = parsed[0]
           if (!parsed || typeof parsed !== 'object') continue
 
-          const internalData = parsed as InternalResponse
-          const geminiResponse = convertInternalToGemini(internalData)
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(geminiResponse)}\n\n`))
+          const data = parsed as { response?: unknown }
+          const output = data.response ?? data
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(output)}\n\n`))
         } catch {}
       }
     },
