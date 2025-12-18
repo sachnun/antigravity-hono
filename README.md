@@ -1,6 +1,6 @@
 # Antigravity Hono
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/daku/antigravity-hono)
+> **Warning**: This project uses Google's internal API. Use at your own risk.
 
 OpenAI and Anthropic compatible API proxy powered by Google Antigravity.
 
@@ -12,6 +12,8 @@ bun run dev
 ```
 
 ## Deploy
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/daku/antigravity-hono)
 
 ```sh
 bun run deploy
