@@ -71,13 +71,53 @@ bun run deploy
 
 ## API Reference
 
+### Chat Completions
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/v1/chat/completions` | POST | API_KEY | OpenAI-compatible chat completions |
+| `/v1/messages` | POST | API_KEY | Anthropic-compatible messages |
+| `/v1/models` | GET | - | List available models |
+| `/v1/models/{model}` | GET | - | Get specific model info |
+| `/search` | POST | accessToken | Google Search with grounding |
+
+### Admin
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/admin/token` | GET | ADMIN_KEY | Check token existence |
+| `/admin/token` | POST | ADMIN_KEY | Store/update token |
+| `/admin/token` | DELETE | ADMIN_KEY | Delete token by email |
+| `/admin/token/refresh` | POST | ADMIN_KEY | Force refresh all tokens |
+| `/admin/accounts` | GET | ADMIN_KEY* | List accounts and quotas |
+
+\* Returns masked emails without ADMIN_KEY
+
+### Documentation
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/v1/chat/completions` | POST | OpenAI-compatible chat completions |
-| `/v1/messages` | POST | Anthropic-compatible messages |
-| `/v1/models` | GET | List available models |
-| `/auth` | GET | Authentication UI |
-| `/doc` | GET | Swagger UI documentation |
+| `/` | GET | Swagger UI |
+| `/openapi.json` | GET | OpenAPI specification |
+
+## Supported Models
+
+### OpenAI-compatible (`/v1/chat/completions`)
+
+| Model | Provider |
+|-------|----------|
+| `gemini-3-pro-preview` | Google |
+| `gemini-2.5-flash` | Google |
+| `gemini-2.5-flash-lite` | Google |
+| `claude-sonnet-4-5` | Anthropic |
+| `claude-opus-4-5` | Anthropic |
+
+### Anthropic-compatible (`/v1/messages`)
+
+| Model | Aliases |
+|-------|---------|
+| `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929`, `claude-4-sonnet` |
+| `claude-opus-4-5` | `claude-opus-4-5-20251101`, `claude-4-opus` |
 
 ## Environment Variables
 
