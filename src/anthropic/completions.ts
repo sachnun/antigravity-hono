@@ -391,10 +391,12 @@ function convertGeminiToAnthropic(
   const parts = candidate?.content?.parts ?? []
 
   const content: ResponseContentBlock[] = []
+  let hasThinking = false
 
   for (const part of parts) {
     if (part.text) {
       if (part.thought && includeThinking) {
+        hasThinking = true
         content.push({
           type: 'thinking',
           thinking: part.text,
@@ -415,6 +417,14 @@ function convertGeminiToAnthropic(
         input: part.functionCall.args,
       })
     }
+  }
+
+  if (includeThinking && !hasThinking) {
+    content.unshift({
+      type: 'thinking',
+      thinking: '...',
+      signature: 'synthetic',
+    })
   }
 
   const stopReasonMap: Record<string, 'end_turn' | 'max_tokens' | 'stop_sequence' | 'tool_use'> = {
@@ -629,11 +639,11 @@ async function collectStreamingResponse(
     }
   }
 
-  if (currentThinking) {
+  if (includeThinking) {
     content.unshift({
       type: 'thinking',
-      thinking: currentThinking,
-      signature: currentThinkingSignature,
+      thinking: currentThinking || '...',
+      signature: currentThinkingSignature || 'synthetic',
     })
   }
 
