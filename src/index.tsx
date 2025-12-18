@@ -7,7 +7,7 @@ import {
   SearchResponseSchema,
   ErrorSchema,
 } from './schemas'
-import { authorizeAntigravity, exchangeAntigravity, refreshAccessToken } from './oauth'
+import { authorizeAntigravity, exchangeAntigravity, refreshAccessToken, type OAuthCredentials } from './oauth'
 import { executeSearch } from './search'
 import {
   handleChatCompletion,
@@ -37,6 +37,8 @@ type Bindings = {
   DB: D1Database
   ADMIN_KEY?: string
   API_KEY?: string
+  OAUTH_CLIENT_ID?: string
+  OAUTH_CLIENT_SECRET?: string
 }
 
 const app = new OpenAPIHono<{ Bindings: Bindings }>()
@@ -45,19 +47,31 @@ app.use('*', cors())
 
 app.get('/auth/authorize', async (c) => {
   const redirectUri = c.req.query('redirectUri')
-  const result = await authorizeAntigravity(redirectUri)
+  const credentials: OAuthCredentials = {
+    clientId: c.env.OAUTH_CLIENT_ID ?? '',
+    clientSecret: c.env.OAUTH_CLIENT_SECRET ?? '',
+  }
+  const result = await authorizeAntigravity(credentials, redirectUri)
   return c.json(result)
 })
 
 app.post('/auth/exchange', async (c) => {
   const body = await c.req.json<{ code: string; state: string }>()
-  const result = await exchangeAntigravity(body.code, body.state)
+  const credentials: OAuthCredentials = {
+    clientId: c.env.OAUTH_CLIENT_ID ?? '',
+    clientSecret: c.env.OAUTH_CLIENT_SECRET ?? '',
+  }
+  const result = await exchangeAntigravity(credentials, body.code, body.state)
   return c.json(result)
 })
 
 app.post('/auth/refresh', async (c) => {
   const body = await c.req.json<{ refreshToken: string }>()
-  const result = await refreshAccessToken(body.refreshToken)
+  const credentials: OAuthCredentials = {
+    clientId: c.env.OAUTH_CLIENT_ID ?? '',
+    clientSecret: c.env.OAUTH_CLIENT_SECRET ?? '',
+  }
+  const result = await refreshAccessToken(credentials, body.refreshToken)
   return c.json(result)
 })
 
@@ -568,7 +582,11 @@ app.post('/admin/token', async (c) => {
   }
 
   if (!token.accessToken || token.expiresAt < Date.now()) {
-    const refreshed = await refreshAccessToken(body.refreshToken)
+    const credentials: OAuthCredentials = {
+      clientId: c.env.OAUTH_CLIENT_ID ?? '',
+      clientSecret: c.env.OAUTH_CLIENT_SECRET ?? '',
+    }
+    const refreshed = await refreshAccessToken(credentials, body.refreshToken)
     token.accessToken = refreshed.accessToken
     token.expiresAt = refreshed.expiresAt
     if (refreshed.refreshToken) {
@@ -687,7 +705,11 @@ app.post('/auth/callback', async (c) => {
     return c.json({ error: 'Missing code or state' }, 400)
   }
 
-  const result = await exchangeAntigravity(body.code, body.state, body.redirectUri)
+  const credentials: OAuthCredentials = {
+    clientId: c.env.OAUTH_CLIENT_ID ?? '',
+    clientSecret: c.env.OAUTH_CLIENT_SECRET ?? '',
+  }
+  const result = await exchangeAntigravity(credentials, body.code, body.state, body.redirectUri)
   
   if (!result.email) {
     return c.json({ error: 'Failed to get email from Google' }, 400)
