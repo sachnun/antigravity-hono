@@ -3,8 +3,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "build:client": "bun run scripts/build-client.ts",
     "migrate": "wrangler d1 migrations apply antigravity-auth --remote",
-    "deploy": "bun run migrate && wrangler deploy --minify",
+    "deploy": "bun run build:client && bun run migrate && wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.8",
+    "esbuild": "^0.27.2",
     "typescript": "^5.9.3",
     "wrangler": "^4.4.0"
   }
