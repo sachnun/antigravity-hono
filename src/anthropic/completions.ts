@@ -87,16 +87,12 @@ function isInToolLoop(contents: GeminiContent[]): boolean {
   return lastMsg.parts.some(p => p.functionResponse !== undefined)
 }
 
-function hasValidThoughtSignature(contents: GeminiContent[]): boolean {
-  for (let i = contents.length - 1; i >= 0; i--) {
-    const msg = contents[i]
+function hasThinkingInHistory(contents: GeminiContent[]): boolean {
+  for (const msg of contents) {
     if (msg.role === 'model') {
       for (const part of msg.parts) {
-        if (part.functionCall && part.thoughtSignature && part.thoughtSignature !== 'skip_thought_signature_validator') {
-          return true
-        }
+        if (part.thought === true) return true
       }
-      break
     }
   }
   return false
@@ -462,14 +458,17 @@ export async function handleAnthropicMessage(
   const resolvedModel = resolveModelAlias(request.model)
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
-  const thinkingEnabled = request.thinking?.type === 'enabled'
-  const thinkingBudget = thinkingEnabled && request.thinking?.type === 'enabled' 
+  const systemPrompt = extractSystemPrompt(request)
+  const contents = convertMessagesToGemini(request.messages, false)
+  const tools = convertToolsToGemini(request.tools)
+
+  const thinkingRequested = request.thinking?.type === 'enabled'
+  const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
     ? request.thinking.budget_tokens 
     : undefined
-
-  const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages, thinkingEnabled)
-  const tools = convertToolsToGemini(request.tools)
+  const inToolLoop = isInToolLoop(contents)
+  const hasThinking = hasThinkingInHistory(contents)
+  const thinkingEnabled = thinkingRequested && (!inToolLoop || hasThinking)
 
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: request.max_tokens,
@@ -681,14 +680,17 @@ export async function handleAnthropicMessageStream(
   const resolvedModel = resolveModelAlias(request.model)
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
-  const thinkingEnabled = request.thinking?.type === 'enabled'
-  const thinkingBudget = thinkingEnabled && request.thinking?.type === 'enabled' 
+  const systemPrompt = extractSystemPrompt(request)
+  const contents = convertMessagesToGemini(request.messages, false)
+  const tools = convertToolsToGemini(request.tools)
+
+  const thinkingRequested = request.thinking?.type === 'enabled'
+  const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
     ? request.thinking.budget_tokens 
     : undefined
-
-  const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages, thinkingEnabled)
-  const tools = convertToolsToGemini(request.tools)
+  const inToolLoop = isInToolLoop(contents)
+  const hasThinking = hasThinkingInHistory(contents)
+  const thinkingEnabled = thinkingRequested && (!inToolLoop || hasThinking)
 
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: request.max_tokens,

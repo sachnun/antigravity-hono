@@ -151,16 +151,12 @@ function isInToolLoop(contents: GeminiContent[]): boolean {
   return lastMsg.parts.some(p => p.functionResponse !== undefined)
 }
 
-function hasValidThoughtSignature(contents: GeminiContent[]): boolean {
-  for (let i = contents.length - 1; i >= 0; i--) {
-    const msg = contents[i]
+function hasThinkingInHistory(contents: GeminiContent[]): boolean {
+  for (const msg of contents) {
     if (msg.role === 'model') {
       for (const part of msg.parts) {
-        if (part.functionCall && part.thoughtSignature && part.thoughtSignature !== 'skip_thought_signature_validator') {
-          return true
-        }
+        if (part.thought === true) return true
       }
-      break
     }
   }
   return false
@@ -666,16 +662,22 @@ export async function handleChatCompletion(
 ): Promise<ChatCompletionResponse | Response> {
   const effectiveModel = resolveModelName(request.model)
   
-  const thinkingConfig = buildThinkingConfig(
+  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
+  const tools = convertToolsToGemini(request.tools)
+
+  const inToolLoop = isInToolLoop(contents)
+  const hasThinking = hasThinkingInHistory(contents)
+  
+  let thinkingConfig = buildThinkingConfig(
     effectiveModel,
     request.reasoning_effort,
     request.thinking_budget,
     request.include_thoughts
   )
-  const thinkingEnabled = thinkingConfig !== null
-  
-  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
-  const tools = convertToolsToGemini(request.tools)
+  if (thinkingConfig && inToolLoop && !hasThinking) {
+    thinkingConfig = undefined
+  }
+  const thinkingEnabled = thinkingConfig !== undefined
 
   const generationConfig: Record<string, unknown> = {}
   if (request.temperature !== undefined) generationConfig.temperature = request.temperature
@@ -752,16 +754,22 @@ export async function handleChatCompletionStream(
 ): Promise<ReadableStream<Uint8Array> | Response> {
   const effectiveModel = resolveModelName(request.model)
   
-  const thinkingConfig = buildThinkingConfig(
+  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
+  const tools = convertToolsToGemini(request.tools)
+
+  const inToolLoop = isInToolLoop(contents)
+  const hasThinking = hasThinkingInHistory(contents)
+  
+  let thinkingConfig = buildThinkingConfig(
     effectiveModel,
     request.reasoning_effort,
     request.thinking_budget,
     request.include_thoughts
   )
-  const thinkingEnabled = thinkingConfig !== null
-  
-  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
-  const tools = convertToolsToGemini(request.tools)
+  if (thinkingConfig && inToolLoop && !hasThinking) {
+    thinkingConfig = undefined
+  }
+  const thinkingEnabled = thinkingConfig !== undefined
 
   const generationConfig: Record<string, unknown> = {}
   if (request.temperature !== undefined) generationConfig.temperature = request.temperature
