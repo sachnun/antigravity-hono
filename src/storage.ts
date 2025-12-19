@@ -1,5 +1,5 @@
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, or, lt, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { tokens, type Token } from './db/schema'
 import { refreshAccessToken } from './oauth'
 import {
@@ -11,13 +11,29 @@ import {
 import { parseRateLimitDelay } from './shared/rate-limit'
 export { parseRateLimitDelay }
 
-const CACHE_TTL_MS = 30 * 1000
-let cachedTokens: StoredToken[] | null = null
-let cacheTimestamp = 0
+const CACHE_KEY = 'https://cache.internal/tokens'
+const CACHE_TTL_SECONDS = 30
 
-function invalidateCache(): void {
-  cachedTokens = null
-  cacheTimestamp = 0
+async function getCachedTokens(): Promise<StoredToken[] | null> {
+  const cache = await caches.open('tokens-cache')
+  const cached = await cache.match(CACHE_KEY)
+  if (!cached) return null
+  return cached.json()
+}
+
+async function setCachedTokens(tokens: StoredToken[]): Promise<void> {
+  const cache = await caches.open('tokens-cache')
+  await cache.put(
+    CACHE_KEY,
+    new Response(JSON.stringify(tokens), {
+      headers: { 'Cache-Control': `max-age=${CACHE_TTL_SECONDS}` }
+    })
+  )
+}
+
+async function invalidateCache(): Promise<void> {
+  const cache = await caches.open('tokens-cache')
+  await cache.delete(CACHE_KEY)
 }
 
 export interface QuotaGroupInfo {
@@ -73,16 +89,14 @@ function getModelFamily(model: string): ModelFamily {
 }
 
 export async function getAllTokens(db: D1Database): Promise<StoredToken[]> {
-  const now = Date.now()
-  if (cachedTokens && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedTokens
-  }
+  const cached = await getCachedTokens()
+  if (cached) return cached
 
   const d1 = drizzle(db)
   const rows = await d1.select().from(tokens)
-  cachedTokens = rows.map(tokenFromRow)
-  cacheTimestamp = now
-  return cachedTokens
+  const result = rows.map(tokenFromRow)
+  await setCachedTokens(result)
+  return result
 }
 
 export async function getTokenForModel(
@@ -94,24 +108,20 @@ export async function getTokenForModel(
   const now = Date.now()
   const family = getModelFamily(model)
 
-  const rateLimitColumn = family === 'claude' ? tokens.claudeRateLimitUntil : tokens.geminiRateLimitUntil
-
-  const available = await d1
-    .select()
-    .from(tokens)
-    .where(or(isNull(rateLimitColumn), lt(rateLimitColumn, now)))
-
-  const filteredAvailable = available.filter(t => !excludeEmails.includes(t.email))
-  if (filteredAvailable.length > 0) {
-    const selected = filteredAvailable[Math.floor(Math.random() * filteredAvailable.length)]
-    return tokenFromRow(selected)
-  }
-
   const all = await d1.select().from(tokens)
-  const filteredAll = all.filter(t => !excludeEmails.includes(t.email))
-  if (filteredAll.length === 0) return null
+  const filtered = all.filter(t => !excludeEmails.includes(t.email))
+  if (filtered.length === 0) return null
 
-  const selected = filteredAll[Math.floor(Math.random() * filteredAll.length)]
+  const getRateLimitUntil = (t: Token) =>
+    family === 'claude' ? t.claudeRateLimitUntil : t.geminiRateLimitUntil
+
+  const available = filtered.filter(t => {
+    const rl = getRateLimitUntil(t)
+    return !rl || rl < now
+  })
+
+  const pool = available.length > 0 ? available : filtered
+  const selected = pool[Math.floor(Math.random() * pool.length)]
   return tokenFromRow(selected)
 }
 

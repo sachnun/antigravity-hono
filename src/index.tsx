@@ -781,7 +781,8 @@ app.post('/auth/callback', async (c) => {
 })
 
 app.onError((err, c) => {
-  return c.json({ error: err.message, details: err.stack }, 500)
+  console.error('Unhandled error:', err)
+  return c.json({ error: err.message }, 500)
 })
 
 export default {
