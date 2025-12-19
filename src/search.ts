@@ -59,9 +59,7 @@ Guidelines:
 - If information is uncertain or conflicting, acknowledge it
 - Focus on answering the user's question directly`
 
-function generateRequestId(): string {
-  return crypto.randomUUID()
-}
+import { generateRequestId } from './shared/utils'
 
 function parseSearchResponse(data: SearchApiResponse): SearchResult {
   const result: SearchResult = {

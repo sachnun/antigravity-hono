@@ -8,6 +8,8 @@ import {
   QUOTA_GROUPS,
   GROUP_DISPLAY_NAMES,
 } from './constants'
+import { parseRateLimitDelay } from './shared/rate-limit'
+export { parseRateLimitDelay }
 
 const CACHE_TTL_MS = 30 * 1000
 let cachedTokens: StoredToken[] | null = null
@@ -281,23 +283,7 @@ export async function getValidAccessToken(
     : null
 }
 
-export function parseRateLimitDelay(errorText: string): number | null {
-  try {
-    const data = JSON.parse(errorText)
-    const details = data.error?.details ?? []
-    for (const detail of details) {
-      if (detail.retryDelay) {
-        const match = detail.retryDelay.match(/^([\d.]+)s?$/)
-        if (match) return parseFloat(match[1]) * 1000
-      }
-    }
-    if (data.error?.quotaResetDelay) {
-      const match = data.error.quotaResetDelay.match(/^([\d.]+)s?$/)
-      if (match) return parseFloat(match[1]) * 1000
-    }
-  } catch {}
-  return null
-}
+
 
 export async function refreshAndStore(db: D1Database, stored: StoredToken): Promise<StoredToken | null> {
   try {
