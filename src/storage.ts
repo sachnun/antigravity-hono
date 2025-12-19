@@ -113,6 +113,98 @@ export async function getTokenForModel(
   return tokenFromRow(selected)
 }
 
+export interface SmartTokenResult {
+  token: StoredToken | null
+  waitMs: number | null
+  nearestEmail: string | null
+}
+
+export async function getSmartTokenForModel(
+  db: D1Database,
+  model: string,
+  excludeEmails: string[] = []
+): Promise<SmartTokenResult> {
+  const d1 = drizzle(db)
+  const now = Date.now()
+  const family = getModelFamily(model)
+
+  const all = await d1.select().from(tokens)
+  const filtered = all.filter(t => !excludeEmails.includes(t.email))
+
+  if (filtered.length === 0) {
+    return { token: null, waitMs: null, nearestEmail: null }
+  }
+
+  const getRateLimitUntil = (t: Token) => 
+    family === 'claude' ? t.claudeRateLimitUntil : t.geminiRateLimitUntil
+
+  const available = filtered.filter(t => {
+    const rl = getRateLimitUntil(t)
+    return !rl || rl < now
+  })
+
+  if (available.length > 0) {
+    const selected = available[Math.floor(Math.random() * available.length)]
+    return { token: tokenFromRow(selected), waitMs: null, nearestEmail: null }
+  }
+
+  let nearestToken: Token | null = null
+  let nearestWait = Infinity
+
+  for (const t of filtered) {
+    const rl = getRateLimitUntil(t)
+    if (rl) {
+      const wait = rl - now
+      if (wait < nearestWait) {
+        nearestWait = wait
+        nearestToken = t
+      }
+    }
+  }
+
+  if (nearestToken) {
+    return {
+      token: null,
+      waitMs: Math.max(0, nearestWait),
+      nearestEmail: nearestToken.email,
+    }
+  }
+
+  return { token: null, waitMs: null, nearestEmail: null }
+}
+
+const MAX_WAIT_MS = 25 * 1000
+
+export async function getTokenWithAutoWait(
+  db: D1Database,
+  model: string,
+  excludeEmails: string[] = []
+): Promise<{ accessToken: string; projectId: string; email: string } | null> {
+  const result = await getSmartTokenForModel(db, model, excludeEmails)
+
+  if (result.token) {
+    const bufferMs = 5 * 60 * 1000
+    if (result.token.expiresAt > Date.now() + bufferMs) {
+      return {
+        accessToken: result.token.accessToken,
+        projectId: result.token.projectId,
+        email: result.token.email,
+      }
+    }
+    const refreshed = await refreshAndStore(db, result.token)
+    return refreshed
+      ? { accessToken: refreshed.accessToken, projectId: refreshed.projectId, email: refreshed.email }
+      : null
+  }
+
+  if (result.waitMs !== null && result.waitMs <= MAX_WAIT_MS && result.nearestEmail) {
+    await new Promise(resolve => setTimeout(resolve, result.waitMs! + 100))
+    return getTokenWithAutoWait(db, model, excludeEmails)
+  }
+
+  return null
+}
+
 export async function markRateLimited(
   db: D1Database,
   email: string,

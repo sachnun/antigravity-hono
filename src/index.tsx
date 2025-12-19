@@ -30,7 +30,7 @@ import {
   AnthropicModelsListResponseSchema,
   AnthropicErrorSchema,
 } from './anthropic'
-import { getValidAccessToken, setStoredToken, handleTokenRefresh, markRateLimited, parseRateLimitDelay, getAllTokens, type StoredToken } from './storage'
+import { getValidAccessToken, setStoredToken, handleTokenRefresh, markRateLimited, parseRateLimitDelay, getAllTokens, getTokenWithAutoWait, type StoredToken } from './storage'
 import { AuthPage } from './auth-ui'
 
 type Bindings = {
@@ -258,11 +258,15 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
   }
 
   const allTokens = await getAllTokens(c.env.DB)
+  if (allTokens.length === 0) {
+    return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
+  }
+
   const triedEmails: string[] = []
   let lastError: Error | null = null
 
-  for (let attempt = 0; attempt < allTokens.length; attempt++) {
-    const stored = await getValidAccessToken(c.env.DB, body.model, triedEmails)
+  for (let attempt = 0; attempt < allTokens.length + 1; attempt++) {
+    const stored = await getTokenWithAutoWait(c.env.DB, body.model, triedEmails)
     if (!stored) {
       if (triedEmails.length > 0) {
         return c.json({ error: 'All accounts rate limited', details: `Tried ${triedEmails.length} accounts` }, 429)
@@ -271,7 +275,9 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
     }
 
     const { accessToken, projectId, email } = stored
-    triedEmails.push(email)
+    if (!triedEmails.includes(email)) {
+      triedEmails.push(email)
+    }
 
     try {
       if (body.stream) {
@@ -532,11 +538,18 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
   }
 
   const allTokens = await getAllTokens(c.env.DB)
+  if (allTokens.length === 0) {
+    return c.json({
+      type: 'error',
+      error: { type: 'authentication_error', message: 'No valid token available' },
+    }, 401)
+  }
+
   const triedEmails: string[] = []
   let lastError: Error | null = null
 
-  for (let attempt = 0; attempt < allTokens.length; attempt++) {
-    const stored = await getValidAccessToken(c.env.DB, body.model, triedEmails)
+  for (let attempt = 0; attempt < allTokens.length + 1; attempt++) {
+    const stored = await getTokenWithAutoWait(c.env.DB, body.model, triedEmails)
     if (!stored) {
       if (triedEmails.length > 0) {
         return c.json({
@@ -551,7 +564,9 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
     }
 
     const { accessToken, projectId, email } = stored
-    triedEmails.push(email)
+    if (!triedEmails.includes(email)) {
+      triedEmails.push(email)
+    }
 
     try {
       if (body.stream) {
