@@ -192,9 +192,10 @@ export async function getTokenWithAutoWait(
       }
     }
     const refreshed = await refreshAndStore(db, result.token)
-    return refreshed
-      ? { accessToken: refreshed.accessToken, projectId: refreshed.projectId, email: refreshed.email }
-      : null
+    if (refreshed) {
+      return { accessToken: refreshed.accessToken, projectId: refreshed.projectId, email: refreshed.email }
+    }
+    return getTokenWithAutoWait(db, model, [...excludeEmails, result.token.email])
   }
 
   if (result.waitMs !== null && result.waitMs <= MAX_WAIT_MS && result.nearestEmail) {
@@ -299,19 +300,23 @@ export function parseRateLimitDelay(errorText: string): number | null {
 }
 
 export async function refreshAndStore(db: D1Database, stored: StoredToken): Promise<StoredToken | null> {
-  const result = await refreshAccessToken(stored.refreshToken)
+  try {
+    const result = await refreshAccessToken(stored.refreshToken)
 
-  const updated: StoredToken = {
-    accessToken: result.accessToken,
-    refreshToken: result.refreshToken ?? stored.refreshToken,
-    projectId: stored.projectId,
-    expiresAt: result.expiresAt,
-    email: stored.email,
-    rateLimitUntil: stored.rateLimitUntil,
+    const updated: StoredToken = {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken ?? stored.refreshToken,
+      projectId: stored.projectId,
+      expiresAt: result.expiresAt,
+      email: stored.email,
+      rateLimitUntil: stored.rateLimitUntil,
+    }
+
+    await setStoredToken(db, updated)
+    return updated
+  } catch {
+    return null
   }
-
-  await setStoredToken(db, updated)
-  return updated
 }
 
 export async function handleTokenRefresh(db: D1Database): Promise<{ success: boolean; refreshed: number; errors: string[] }> {
