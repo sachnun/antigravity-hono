@@ -87,75 +87,15 @@ function isInToolLoop(contents: GeminiContent[]): boolean {
   return lastMsg.parts.some(p => p.functionResponse !== undefined)
 }
 
-function hasTurnStartThinking(contents: GeminiContent[]): boolean {
-  let lastRealUserIdx = -1
-  for (let i = 0; i < contents.length; i++) {
-    const msg = contents[i]
-    if (msg.role === 'user') {
-      const isToolResult = msg.parts.some(p => p.functionResponse !== undefined)
-      if (!isToolResult) lastRealUserIdx = i
-    }
-  }
-  
-  for (let i = lastRealUserIdx + 1; i < contents.length; i++) {
-    if (contents[i].role === 'model') {
-      return contents[i].parts.some(p => p.thought === true)
-    }
-  }
-  return false
-}
-
-function hasValidThoughtSignature(contents: GeminiContent[]): boolean {
-  for (let i = contents.length - 1; i >= 0; i--) {
-    const msg = contents[i]
+function hasThinkingInHistory(contents: GeminiContent[]): boolean {
+  for (const msg of contents) {
     if (msg.role === 'model') {
       for (const part of msg.parts) {
-        if (part.functionCall && part.thoughtSignature && part.thoughtSignature !== 'skip_thought_signature_validator') {
-          return true
-        }
+        if (part.thought === true) return true
       }
-      break
     }
   }
   return false
-}
-
-function sanitizeThinkingForClaude(contents: GeminiContent[], thinkingEnabled: boolean): GeminiContent[] {
-  if (!thinkingEnabled) return contents
-  
-  const inToolLoop = isInToolLoop(contents)
-  if (!inToolLoop) return contents
-  
-  const hasThinking = hasTurnStartThinking(contents)
-  if (hasThinking) return contents
-  
-  const hasSignature = hasValidThoughtSignature(contents)
-  if (hasSignature) return contents
-  
-  let toolResultCount = 0
-  for (let i = contents.length - 1; i >= 0; i--) {
-    const msg = contents[i]
-    if (msg.role === 'user') {
-      const funcResponses = msg.parts.filter(p => p.functionResponse !== undefined)
-      if (funcResponses.length > 0) {
-        toolResultCount += funcResponses.length
-      } else {
-        break
-      }
-    } else if (msg.role === 'model') {
-      break
-    }
-  }
-  
-  const syntheticModelContent = toolResultCount <= 1 
-    ? '[Tool execution completed.]' 
-    : `[${toolResultCount} tool executions completed.]`
-  
-  return [
-    ...contents,
-    { role: 'model', parts: [{ text: syntheticModelContent }] },
-    { role: 'user', parts: [{ text: '[Continue]' }] },
-  ]
 }
 
 function convertMessagesToGemini(
@@ -212,9 +152,6 @@ function convertMessagesToGemini(
               id: block.id,
             },
           }
-          if (thinkingEnabled) {
-            funcPart.thoughtSignature = 'skip_thought_signature_validator'
-          }
           parts.push(funcPart)
         } else if (block.type === 'tool_result') {
           let parsedContent: unknown
@@ -258,7 +195,7 @@ function convertMessagesToGemini(
     }
   }
 
-  return sanitizeThinkingForClaude(contents, thinkingEnabled)
+  return contents
 }
 
 function convertToolsToGemini(tools: AnthropicMessageRequest['tools']): GeminiTool[] | undefined {
@@ -521,14 +458,17 @@ export async function handleAnthropicMessage(
   const resolvedModel = resolveModelAlias(request.model)
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
-  const thinkingEnabled = request.thinking?.type === 'enabled'
-  const thinkingBudget = thinkingEnabled && request.thinking?.type === 'enabled' 
+  const systemPrompt = extractSystemPrompt(request)
+  const contents = convertMessagesToGemini(request.messages, false)
+  const tools = convertToolsToGemini(request.tools)
+
+  const thinkingRequested = request.thinking?.type === 'enabled'
+  const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
     ? request.thinking.budget_tokens 
     : undefined
-
-  const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages, thinkingEnabled)
-  const tools = convertToolsToGemini(request.tools)
+  const inToolLoop = isInToolLoop(contents)
+  const hasThinking = hasThinkingInHistory(contents)
+  const thinkingEnabled = thinkingRequested && (!inToolLoop || hasThinking)
 
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: request.max_tokens,
@@ -740,14 +680,17 @@ export async function handleAnthropicMessageStream(
   const resolvedModel = resolveModelAlias(request.model)
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
-  const thinkingEnabled = request.thinking?.type === 'enabled'
-  const thinkingBudget = thinkingEnabled && request.thinking?.type === 'enabled' 
+  const systemPrompt = extractSystemPrompt(request)
+  const contents = convertMessagesToGemini(request.messages, false)
+  const tools = convertToolsToGemini(request.tools)
+
+  const thinkingRequested = request.thinking?.type === 'enabled'
+  const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
     ? request.thinking.budget_tokens 
     : undefined
-
-  const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages, thinkingEnabled)
-  const tools = convertToolsToGemini(request.tools)
+  const inToolLoop = isInToolLoop(contents)
+  const hasThinking = hasThinkingInHistory(contents)
+  const thinkingEnabled = thinkingRequested && (!inToolLoop || hasThinking)
 
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: request.max_tokens,
