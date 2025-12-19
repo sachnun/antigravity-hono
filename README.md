@@ -78,4 +78,4 @@ bun run deploy
 
 ## License
 
-MIT
+[MIT](LICENSE)
