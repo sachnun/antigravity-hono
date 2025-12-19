@@ -1,6 +1,7 @@
 import type { FC } from 'hono/jsx'
 import { raw } from 'hono/html'
-import { clientScript } from './client/auth.js'
+
+const { clientScript } = await import('./client/auth.js') as { clientScript: string }
 
 const scrollbarStyles = `
   .scrollbar-thin::-webkit-scrollbar { width: 6px; }

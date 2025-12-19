@@ -9,7 +9,7 @@ const MessageSchema = z.object({
       text: z.string().optional(),
       image_url: z.object({ url: z.string() }).optional(),
     })),
-  ]).openapi({ example: 'Hello!' }),
+  ]).nullable().optional().openapi({ example: 'Hello!' }),
   name: z.string().optional(),
   tool_calls: z.array(z.object({
     id: z.string(),
