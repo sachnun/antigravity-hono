@@ -8,70 +8,25 @@ import type {
   ResponseContentBlock,
 } from './schemas'
 import { resolveModelAlias } from './models'
+import {
+  type RateLimitInfo,
+  extractRateLimitInfo,
+} from '../shared/rate-limit'
+import {
+  generateRequestId,
+  generateMessageId,
+  generateToolUseId,
+  isInToolLoop,
+  hasThinkingInHistory,
+} from '../shared/utils'
+import { ensureObjectSchema } from '../shared/schema-utils'
+import type { GeminiContent, GeminiTool, AntigravityResponse } from '../shared/gemini-types'
 
-export interface RateLimitInfo {
-  isRateLimited: boolean
-  retryDelayMs: number | null
-  errorText: string | null
-}
+export { extractRateLimitInfo, type RateLimitInfo }
 
 const INTERNAL_MODEL_MAP: Record<string, string> = {
   'claude-sonnet-4-5': 'claude-sonnet-4-5',
   'claude-opus-4-5': 'claude-opus-4-5-thinking',
-}
-
-function parseRateLimitError(text: string): string | null {
-  try {
-    const data = JSON.parse(text)
-    const details = data.error?.details ?? []
-    for (const detail of details) {
-      if (detail.retryDelay) return detail.retryDelay
-    }
-    if (data.error?.quotaResetDelay) return data.error.quotaResetDelay
-  } catch {}
-  return null
-}
-
-function parseDelaySeconds(delay: string): number {
-  const match = delay.match(/^([\d.]+)s?$/)
-  return match ? parseFloat(match[1]) : 0
-}
-
-export function extractRateLimitInfo(response: Response, errorText: string): RateLimitInfo {
-  if (response.status !== 429) {
-    return { isRateLimited: false, retryDelayMs: null, errorText: null }
-  }
-  const retryDelay = parseRateLimitError(errorText)
-  const retryDelayMs = retryDelay ? parseDelaySeconds(retryDelay) * 1000 : null
-  return { isRateLimited: true, retryDelayMs, errorText }
-}
-
-function generateMessageId(): string {
-  return `msg_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`
-}
-
-function generateRequestId(): string {
-  return crypto.randomUUID()
-}
-
-interface GeminiContent {
-  role: string
-  parts: Array<{
-    text?: string
-    thought?: boolean
-    thoughtSignature?: string
-    inlineData?: { mimeType: string; data: string }
-    functionCall?: { name: string; args: Record<string, unknown>; id?: string }
-    functionResponse?: { name: string; response: unknown; id?: string }
-  }>
-}
-
-interface GeminiTool {
-  functionDeclarations: Array<{
-    name: string
-    description?: string
-    parameters?: Record<string, unknown>
-  }>
 }
 
 function extractSystemPrompt(request: AnthropicMessageRequest): string | undefined {
@@ -80,27 +35,8 @@ function extractSystemPrompt(request: AnthropicMessageRequest): string | undefin
   return request.system.map(block => block.text).join('\n')
 }
 
-function isInToolLoop(contents: GeminiContent[]): boolean {
-  if (contents.length === 0) return false
-  const lastMsg = contents[contents.length - 1]
-  if (lastMsg.role !== 'user') return false
-  return lastMsg.parts.some(p => p.functionResponse !== undefined)
-}
-
-function hasThinkingInHistory(contents: GeminiContent[]): boolean {
-  for (const msg of contents) {
-    if (msg.role === 'model') {
-      for (const part of msg.parts) {
-        if (part.thought === true) return true
-      }
-    }
-  }
-  return false
-}
-
 function convertMessagesToGemini(
-  messages: AnthropicMessageRequest['messages'],
-  thinkingEnabled: boolean
+  messages: AnthropicMessageRequest['messages']
 ): GeminiContent[] {
   const contents: GeminiContent[] = []
   const toolIdToName: Record<string, string> = {}
@@ -209,183 +145,6 @@ function convertToolsToGemini(tools: AnthropicMessageRequest['tools']): GeminiTo
   }]
 }
 
-const UNSUPPORTED_SCHEMA_KEYS = new Set([
-  '$schema', '$id', '$ref', '$defs', '$comment', '$vocabulary',
-  'definitions', 'propertyNames', 'additionalProperties', 'additionalItems',
-  'unevaluatedProperties', 'unevaluatedItems', 'contentEncoding', 'contentMediaType',
-  'contentSchema', 'if', 'then', 'else', 'allOf', 'anyOf', 'oneOf', 'not',
-  'minContains', 'maxContains', 'dependentRequired', 'dependentSchemas',
-  'prefixItems', 'contains', 'patternProperties', 'const', 'deprecated',
-  'minItems', 'maxItems', 'pattern', 'minLength', 'maxLength',
-  'minimum', 'maximum', 'default', 'exclusiveMinimum', 'exclusiveMaximum',
-  'multipleOf', 'format', 'minProperties', 'maxProperties', 'uniqueItems',
-  'readOnly', 'writeOnly', 'examples', 'title',
-])
-
-const VALID_TYPES = new Set(['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'])
-
-function inlineSchemaRefs(schema: Record<string, unknown>): Record<string, unknown> {
-  if (!schema || typeof schema !== 'object') return schema
-  
-  const defs = (schema.$defs ?? schema.definitions ?? {}) as Record<string, unknown>
-  if (!defs || Object.keys(defs).length === 0) return schema
-
-  const resolve = (node: unknown, seen: Set<string> = new Set()): unknown => {
-    if (!node || typeof node !== 'object') return node
-    if (Array.isArray(node)) return node.map(item => resolve(item, seen))
-    
-    const obj = node as Record<string, unknown>
-    
-    if ('$ref' in obj && typeof obj.$ref === 'string') {
-      const ref = obj.$ref
-      if (seen.has(ref)) {
-        const result: Record<string, unknown> = {}
-        for (const [k, v] of Object.entries(obj)) {
-          if (k !== '$ref') result[k] = resolve(v, seen)
-        }
-        return result
-      }
-      
-      for (const prefix of ['#/$defs/', '#/definitions/']) {
-        if (ref.startsWith(prefix)) {
-          const name = ref.slice(prefix.length)
-          if (name in defs) {
-            const newSeen = new Set(seen)
-            newSeen.add(ref)
-            return resolve(JSON.parse(JSON.stringify(defs[name])), newSeen)
-          }
-        }
-      }
-      
-      const result: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(obj)) {
-        if (k !== '$ref') result[k] = resolve(v, seen)
-      }
-      return result
-    }
-    
-    const result: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = resolve(v, seen)
-    }
-    return result
-  }
-  
-  return resolve(schema) as Record<string, unknown>
-}
-
-function cleanSchema(obj: unknown, depth = 0): unknown {
-  if (depth > 20) return obj
-  if (obj === null || obj === undefined) return undefined
-  if (typeof obj !== 'object') return obj
-  if (Array.isArray(obj)) {
-    const cleaned = obj.map(item => cleanSchema(item, depth + 1)).filter(x => x !== undefined)
-    return cleaned.length > 0 ? cleaned : undefined
-  }
-  
-  const input = obj as Record<string, unknown>
-  const result: Record<string, unknown> = {}
-
-  if ('anyOf' in input && Array.isArray(input.anyOf) && input.anyOf.length > 0) {
-    const firstOption = cleanSchema(input.anyOf[0], depth + 1)
-    if (firstOption && typeof firstOption === 'object') {
-      return firstOption
-    }
-  }
-
-  if ('oneOf' in input && Array.isArray(input.oneOf) && input.oneOf.length > 0) {
-    const firstOption = cleanSchema(input.oneOf[0], depth + 1)
-    if (firstOption && typeof firstOption === 'object') {
-      return firstOption
-    }
-  }
-
-  if ('const' in input) {
-    result.enum = [input.const]
-  }
-  
-  for (const [key, value] of Object.entries(input)) {
-    if (UNSUPPORTED_SCHEMA_KEYS.has(key)) continue
-    if (key === 'const') continue
-    if (value === undefined || value === null) continue
-    
-    if (key === 'type') {
-      if (typeof value === 'string' && VALID_TYPES.has(value)) {
-        result[key] = value
-      } else if (Array.isArray(value)) {
-        const validTypes = value.filter(t => typeof t === 'string' && VALID_TYPES.has(t))
-        if (validTypes.length === 1) {
-          result[key] = validTypes[0]
-        } else if (validTypes.length > 1) {
-          result[key] = validTypes[0]
-        }
-      }
-      continue
-    }
-    
-    if (key === 'properties' && typeof value === 'object' && value !== null) {
-      const cleanedProps: Record<string, unknown> = {}
-      for (const [propKey, propValue] of Object.entries(value as Record<string, unknown>)) {
-        const cleanedProp = cleanSchema(propValue, depth + 1)
-        if (cleanedProp && typeof cleanedProp === 'object' && Object.keys(cleanedProp as object).length > 0) {
-          cleanedProps[propKey] = cleanedProp
-        }
-      }
-      if (Object.keys(cleanedProps).length > 0) {
-        result[key] = cleanedProps
-      }
-      continue
-    }
-    
-    if (key === 'items') {
-      const cleanedItems = cleanSchema(value, depth + 1)
-      if (cleanedItems && typeof cleanedItems === 'object' && Object.keys(cleanedItems as object).length > 0) {
-        result[key] = cleanedItems
-      }
-      continue
-    }
-    
-    const cleaned = cleanSchema(value, depth + 1)
-    if (cleaned !== undefined) {
-      result[key] = cleaned
-    }
-  }
-  
-  return Object.keys(result).length > 0 ? result : undefined
-}
-
-function ensureObjectSchema(params: Record<string, unknown> | undefined): Record<string, unknown> {
-  if (!params) return { type: 'object', properties: {} }
-  const inlined = inlineSchemaRefs(params)
-  const cleaned = cleanSchema(inlined) as Record<string, unknown> | undefined
-  if (!cleaned) return { type: 'object', properties: {} }
-  if (cleaned.type === 'object') return cleaned
-  return { type: 'object', ...cleaned }
-}
-
-interface AntigravityResponse {
-  response?: {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          text?: string
-          thought?: boolean
-          thoughtSignature?: string
-          functionCall?: { name: string; args: Record<string, unknown>; id?: string }
-        }>
-      }
-      finishReason?: string
-    }>
-    usageMetadata?: {
-      promptTokenCount?: number
-      candidatesTokenCount?: number
-      totalTokenCount?: number
-      thoughtsTokenCount?: number
-    }
-  }
-  error?: { code?: number; message?: string; status?: string }
-}
-
 function convertGeminiToAnthropic(
   data: AntigravityResponse,
   model: string,
@@ -416,7 +175,7 @@ function convertGeminiToAnthropic(
     if (part.functionCall) {
       content.push({
         type: 'tool_use',
-        id: `toolu_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
+        id: generateToolUseId(),
         name: part.functionCall.name,
         input: part.functionCall.args,
       })
@@ -459,7 +218,7 @@ export async function handleAnthropicMessage(
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
   const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages, false)
+  const contents = convertMessagesToGemini(request.messages)
   const tools = convertToolsToGemini(request.tools)
 
   const thinkingRequested = request.thinking?.type === 'enabled'
@@ -576,7 +335,20 @@ async function collectStreamingResponse(
   let currentThinking = ''
   let currentThinkingSignature = ''
 
-  const reader = response.body!.getReader()
+  if (!response.body) {
+    return {
+      id: messageId,
+      type: 'message',
+      role: 'assistant',
+      content: [],
+      model,
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    }
+  }
+
+  const reader = response.body.getReader()
   let buffer = ''
 
   while (true) {
@@ -615,7 +387,7 @@ async function collectStreamingResponse(
           if (part.functionCall) {
             content.push({
               type: 'tool_use',
-              id: `toolu_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
+              id: generateToolUseId(),
               name: part.functionCall.name,
               input: part.functionCall.args,
             })
@@ -681,7 +453,7 @@ export async function handleAnthropicMessageStream(
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
   const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages, false)
+  const contents = convertMessagesToGemini(request.messages)
   const tools = convertToolsToGemini(request.tools)
 
   const thinkingRequested = request.thinking?.type === 'enabled'
@@ -861,7 +633,7 @@ export async function handleAnthropicMessageStream(
                 textBlockStarted = false
               }
 
-              const toolId = `toolu_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`
+              const toolId = generateToolUseId()
               currentToolCalls.push({
                 id: toolId,
                 name: part.functionCall.name,
@@ -929,5 +701,9 @@ export async function handleAnthropicMessageStream(
     },
   })
 
-  return response.body!.pipeThrough(transformStream)
+  if (!response.body) {
+    return new Response('No response body', { status: 500 })
+  }
+
+  return response.body.pipeThrough(transformStream)
 }
