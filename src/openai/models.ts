@@ -6,6 +6,12 @@ export const AVAILABLE_MODELS = [
     created: 1700000000,
   },
   {
+    id: 'gemini-3-flash',
+    name: 'Gemini 3 Flash',
+    owned_by: 'google',
+    created: 1700000000,
+  },
+  {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     owned_by: 'google',
@@ -27,6 +33,12 @@ export const AVAILABLE_MODELS = [
     id: 'claude-opus-4-5',
     name: 'Claude Opus 4.5',
     owned_by: 'anthropic',
+    created: 1700000000,
+  },
+  {
+    id: 'gpt-oss-120b-medium',
+    name: 'GPT-OSS 120B Medium',
+    owned_by: 'openai',
     created: 1700000000,
   },
 ] as const

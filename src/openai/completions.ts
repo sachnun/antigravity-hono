@@ -33,7 +33,7 @@ function resolveModelName(model: string): string {
   return MODEL_ALIASES[model] ?? model
 }
 
-type ThinkingLevel = 'low' | 'medium' | 'high'
+type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high'
 type ReasoningEffort = 'none' | 'low' | 'medium' | 'high'
 
 interface ThinkingConfig {
@@ -50,7 +50,11 @@ const THINKING_BUDGET_MAP: Record<ReasoningEffort, number> = {
 }
 
 function isGemini3Model(model: string): boolean {
-  return model.includes('gemini-3') || model.includes('gemini-3-pro')
+  return model.includes('gemini-3')
+}
+
+function isGemini3FlashModel(model: string): boolean {
+  return model.includes('gemini-3-flash')
 }
 
 function isGemini25Model(model: string): boolean {
@@ -77,7 +81,11 @@ function buildThinkingConfig(
     if (thinkingBudget !== undefined) {
       config.thinkingBudget = thinkingBudget
     } else if (reasoningEffort && reasoningEffort !== 'none') {
-      config.thinkingLevel = reasoningEffort as ThinkingLevel
+      if (isGemini3FlashModel(effectiveModel)) {
+        config.thinkingLevel = reasoningEffort as ThinkingLevel
+      } else {
+        config.thinkingLevel = reasoningEffort === 'low' ? 'low' : 'high'
+      }
     }
   } else if (isGemini25Model(effectiveModel) || isClaudeModel(effectiveModel)) {
     if (thinkingBudget !== undefined) {
