@@ -50,6 +50,9 @@ export const QUOTA_GROUPS: Record<string, string[]> = {
     'gemini-3-pro-low',
     'gemini-3-pro-preview',
   ],
+  'gemini-3-flash': [
+    'gemini-3-flash',
+  ],
   'gemini-2.5-flash': [
     'gemini-2.5-flash',
     'gemini-2.5-flash-thinking',
@@ -60,6 +63,7 @@ export const QUOTA_GROUPS: Record<string, string[]> = {
 export const GROUP_DISPLAY_NAMES: Record<string, string> = {
   claude: 'Claude / GPT-OSS',
   'gemini-3-pro': 'Gemini 3 Pro',
+  'gemini-3-flash': 'Gemini 3 Flash',
   'gemini-2.5-flash': 'Gemini 2.5 Flash',
 }
 

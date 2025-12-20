@@ -54,18 +54,20 @@ bun run deploy
 
 ## Models
 
-### OpenAI-compatible
+### OpenAI-compatible (`/v1/chat/completions`)
 
-- `gemini-3-pro-preview`
-- `gemini-2.5-flash`
-- `gemini-2.5-flash-lite`
+- `gemini-3-pro-preview` - Gemini 3 Pro (thinkingLevel)
+- `gemini-3-flash` - Gemini 3 Flash (thinkingLevel)
+- `gemini-2.5-flash` - Gemini 2.5 Flash (thinkingBudget)
+- `gemini-2.5-flash-lite` - Gemini 2.5 Flash Lite (thinkingBudget)
+- `claude-sonnet-4-5` - Claude Sonnet 4.5 (thinkingBudget)
+- `claude-opus-4-5` - Claude Opus 4.5 (thinkingBudget)
+- `gpt-oss-120b-medium` - GPT-OSS 120B
+
+### Anthropic-compatible (`/v1/messages`)
+
 - `claude-sonnet-4-5`
 - `claude-opus-4-5`
-
-### Anthropic-compatible
-
-- `claude-sonnet-4-5` (aliases: `claude-sonnet-4-5-20250929`, `claude-4-sonnet`)
-- `claude-opus-4-5` (aliases: `claude-opus-4-5-20251101`, `claude-4-opus`)
 
 ## Scripts
 
