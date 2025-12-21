@@ -74,7 +74,6 @@ app.doc('/openapi.json', {
   tags: [
     { name: 'OpenAI Compatible', description: 'OpenAI-compatible chat completions API' },
     { name: 'Anthropic Compatible', description: 'Anthropic-compatible messages API' },
-    { name: 'Search', description: 'Google Search endpoints' },
   ],
 })
 
