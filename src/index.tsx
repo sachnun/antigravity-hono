@@ -271,7 +271,7 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
       if (triedEmails.length > 0) {
         return c.json({ error: 'All accounts rate limited', details: `Tried ${triedEmails.length} accounts` }, 429)
       }
-      return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
+      return c.json({ error: 'All accounts rate limited' }, 429)
     }
 
     const { accessToken, projectId, email } = stored
@@ -559,8 +559,8 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
       }
       return c.json({
         type: 'error',
-        error: { type: 'authentication_error', message: 'No valid token available' },
-      }, 401)
+        error: { type: 'rate_limit_error', message: 'All accounts rate limited' },
+      }, 429)
     }
 
     const { accessToken, projectId, email } = stored
