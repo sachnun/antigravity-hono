@@ -16,8 +16,9 @@ import {
   isInToolLoop,
   hasThinkingInHistory,
 } from '../shared/utils'
-import { ensureObjectSchema } from '../shared/schema-utils'
-import type { GeminiContent, GeminiTool, AntigravityResponse } from '../shared/gemini-types'
+import { convertAnthropicMessagesToGemini, convertAnthropicToolsToGemini, type AnthropicMessage, type AnthropicTool } from '../shared/gemini-converter'
+import type { AntigravityResponse } from '../shared/gemini-types'
+import { THINKING_OUTPUT_BUFFER } from '../shared/constants'
 
 export { extractRateLimitInfo, type RateLimitInfo }
 
@@ -30,122 +31,6 @@ function extractSystemPrompt(request: AnthropicMessageRequest): string | undefin
   if (!request.system) return undefined
   if (typeof request.system === 'string') return request.system
   return request.system.map(block => block.text).join('\n')
-}
-
-function convertMessagesToGemini(
-  messages: AnthropicMessageRequest['messages']
-): GeminiContent[] {
-  const contents: GeminiContent[] = []
-  const toolIdToName: Record<string, string> = {}
-
-  for (const msg of messages) {
-    if (typeof msg.content !== 'string') {
-      for (const block of msg.content) {
-        if (block.type === 'tool_use') {
-          toolIdToName[block.id] = block.name
-        }
-      }
-    }
-  }
-
-  for (const msg of messages) {
-    const role = msg.role === 'assistant' ? 'model' : 'user'
-    const parts: GeminiContent['parts'] = []
-
-    if (typeof msg.content === 'string') {
-      parts.push({ text: msg.content })
-    } else {
-      let pendingToolResults: GeminiContent['parts'] = []
-
-      for (const block of msg.content) {
-        if (block.type === 'text') {
-          if (pendingToolResults.length > 0) {
-            contents.push({ role: 'user', parts: pendingToolResults })
-            pendingToolResults = []
-          }
-          parts.push({ text: block.text })
-        } else if (block.type === 'image') {
-          if (pendingToolResults.length > 0) {
-            contents.push({ role: 'user', parts: pendingToolResults })
-            pendingToolResults = []
-          }
-          if (block.source.type === 'base64' && block.source.data && block.source.media_type) {
-            parts.push({
-              inlineData: {
-                mimeType: block.source.media_type,
-                data: block.source.data,
-              },
-            })
-          }
-        } else if (block.type === 'tool_use') {
-          const funcPart: GeminiContent['parts'][0] = {
-            functionCall: {
-              name: block.name,
-              args: block.input as Record<string, unknown>,
-              id: block.id,
-            },
-          }
-          parts.push(funcPart)
-        } else if (block.type === 'tool_result') {
-          let parsedContent: unknown
-          if (typeof block.content === 'string') {
-            try {
-              parsedContent = JSON.parse(block.content)
-            } catch {
-              parsedContent = block.content
-            }
-          } else {
-            parsedContent = block.content
-          }
-          const funcName = toolIdToName[block.tool_use_id] ?? 'unknown_function'
-          pendingToolResults.push({
-            functionResponse: {
-              name: funcName,
-              response: { result: parsedContent },
-              id: block.tool_use_id,
-            },
-          })
-        } else if (block.type === 'thinking') {
-          parts.push({
-            text: block.thinking,
-            thought: true,
-            thoughtSignature: block.signature,
-          })
-        } else if (block.type === 'redacted_thinking') {
-          parts.push({
-            text: '',
-            thought: true,
-            thoughtSignature: block.data,
-          })
-        }
-      }
-
-      if (pendingToolResults.length > 0) {
-        if (parts.length > 0) {
-          contents.push({ role, parts })
-        }
-        contents.push({ role: 'user', parts: pendingToolResults })
-        continue
-      }
-    }
-
-    if (parts.length > 0) {
-      contents.push({ role, parts })
-    }
-  }
-
-  return contents
-}
-
-function convertToolsToGemini(tools: AnthropicMessageRequest['tools']): GeminiTool[] | undefined {
-  if (!tools?.length) return undefined
-  return [{
-    functionDeclarations: tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: ensureObjectSchema(tool.input_schema as Record<string, unknown>),
-    })),
-  }]
 }
 
 function convertGeminiToAnthropic(
@@ -221,8 +106,8 @@ export async function handleAnthropicMessage(
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
   const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages)
-  const tools = convertToolsToGemini(request.tools)
+  const contents = convertAnthropicMessagesToGemini(request.messages as AnthropicMessage[])
+  const tools = convertAnthropicToolsToGemini(request.tools as AnthropicTool[])
 
   const thinkingRequested = request.thinking?.type === 'enabled'
   const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
@@ -246,7 +131,7 @@ export async function handleAnthropicMessage(
       includeThoughts: true,
     }
     const currentMax = request.max_tokens
-    const requiredMax = thinkingBudget + 4096
+    const requiredMax = thinkingBudget + THINKING_OUTPUT_BUFFER
     if (currentMax <= thinkingBudget) {
       generationConfig.maxOutputTokens = requiredMax
     }
@@ -445,8 +330,8 @@ export async function handleAnthropicMessageStream(
   const effectiveModel = INTERNAL_MODEL_MAP[resolvedModel] ?? resolvedModel
 
   const systemPrompt = extractSystemPrompt(request)
-  const contents = convertMessagesToGemini(request.messages)
-  const tools = convertToolsToGemini(request.tools)
+  const contents = convertAnthropicMessagesToGemini(request.messages as AnthropicMessage[])
+  const tools = convertAnthropicToolsToGemini(request.tools as AnthropicTool[])
 
   const thinkingRequested = request.thinking?.type === 'enabled'
   const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
@@ -470,7 +355,7 @@ export async function handleAnthropicMessageStream(
       includeThoughts: true,
     }
     const currentMax = request.max_tokens
-    const requiredMax = thinkingBudget + 4096
+    const requiredMax = thinkingBudget + THINKING_OUTPUT_BUFFER
     if (currentMax <= thinkingBudget) {
       generationConfig.maxOutputTokens = requiredMax
     }

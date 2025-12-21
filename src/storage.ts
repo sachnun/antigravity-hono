@@ -9,9 +9,9 @@ import {
   GROUP_DISPLAY_NAMES,
 } from './constants'
 import { parseRateLimitDelay } from './shared/rate-limit'
+import { CACHE_TTL_MS, MAX_AUTO_WAIT_MS, TOKEN_EXPIRY_BUFFER_MS } from './shared/constants'
 export { parseRateLimitDelay }
 
-const CACHE_TTL_MS = 30 * 1000
 let cachedTokens: StoredToken[] | null = null
 let cacheTimestamp = 0
 
@@ -175,8 +175,6 @@ export async function getSmartTokenForModel(
   return { token: null, waitMs: null, nearestEmail: null }
 }
 
-const MAX_WAIT_MS = 25 * 1000
-
 export async function getTokenWithAutoWait(
   db: D1Database,
   model: string,
@@ -185,8 +183,7 @@ export async function getTokenWithAutoWait(
   const result = await getSmartTokenForModel(db, model, excludeEmails)
 
   if (result.token) {
-    const bufferMs = 5 * 60 * 1000
-    if (result.token.expiresAt > Date.now() + bufferMs) {
+    if (result.token.expiresAt > Date.now() + TOKEN_EXPIRY_BUFFER_MS) {
       return {
         accessToken: result.token.accessToken,
         projectId: result.token.projectId,
@@ -200,7 +197,7 @@ export async function getTokenWithAutoWait(
     return getTokenWithAutoWait(db, model, [...excludeEmails, result.token.email])
   }
 
-  if (result.waitMs !== null && result.waitMs <= MAX_WAIT_MS && result.nearestEmail) {
+  if (result.waitMs !== null && result.waitMs <= MAX_AUTO_WAIT_MS && result.nearestEmail) {
     await new Promise(resolve => setTimeout(resolve, result.waitMs! + 100))
     return getTokenWithAutoWait(db, model, excludeEmails)
   }

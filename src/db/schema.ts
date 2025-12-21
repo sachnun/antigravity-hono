@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 
 export const tokens = sqliteTable('tokens', {
   email: text('email').primaryKey(),
@@ -10,7 +10,10 @@ export const tokens = sqliteTable('tokens', {
   geminiRateLimitUntil: integer('gemini_rate_limit_until'),
   claudeRateLimitUntil: integer('claude_rate_limit_until'),
   updatedAt: integer('updated_at').$defaultFn(() => Date.now()),
-})
+}, (table) => [
+  index('gemini_rate_limit_idx').on(table.geminiRateLimitUntil),
+  index('claude_rate_limit_idx').on(table.claudeRateLimitUntil),
+])
 
 export type Token = typeof tokens.$inferSelect
 export type NewToken = typeof tokens.$inferInsert

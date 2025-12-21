@@ -3,7 +3,6 @@ import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
   ChatCompletionChunk,
-  Message,
 } from './schemas'
 import {
   type RateLimitInfo,
@@ -16,8 +15,9 @@ import {
   isInToolLoop,
   hasThinkingInHistory,
 } from '../shared/utils'
-import { ensureObjectSchema } from '../shared/schema-utils'
-import type { GeminiContent, GeminiTool, AntigravityResponse } from '../shared/gemini-types'
+import { convertOpenAIMessagesToGemini, convertOpenAIToolsToGemini, type OpenAIMessage } from '../shared/gemini-converter'
+import type { AntigravityResponse } from '../shared/gemini-types'
+import { THINKING_OUTPUT_BUFFER } from '../shared/constants'
 
 export { extractRateLimitInfo, type RateLimitInfo }
 
@@ -99,114 +99,6 @@ function buildThinkingConfig(
   config.includeThoughts = includeThoughts ?? true
 
   return config
-}
-
-function convertMessagesToGemini(messages: Message[]): { contents: GeminiContent[]; systemInstruction?: { parts: Array<{ text: string }> } } {
-  const contents: GeminiContent[] = []
-  let systemInstruction: { parts: Array<{ text: string }> } | undefined
-
-  const toolIdToName: Record<string, string> = {}
-  for (const msg of messages) {
-    if (msg.role === 'assistant' && msg.tool_calls) {
-      for (const tc of msg.tool_calls) {
-        if (tc.type === 'function') {
-          toolIdToName[tc.id] = tc.function.name
-        }
-      }
-    }
-  }
-
-  let pendingToolParts: GeminiContent['parts'] = []
-
-  for (const msg of messages) {
-    if (msg.role === 'system') {
-      const text = typeof msg.content === 'string' ? msg.content : msg.content?.map(p => p.text).filter(Boolean).join('\n') ?? ''
-      systemInstruction = { parts: [{ text }] }
-      continue
-    }
-
-    if (pendingToolParts.length > 0 && msg.role !== 'tool') {
-      contents.push({ role: 'user', parts: pendingToolParts })
-      pendingToolParts = []
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      let parsedContent: unknown
-      if (typeof msg.content === 'string') {
-        try {
-          parsedContent = JSON.parse(msg.content)
-        } catch {
-          parsedContent = msg.content
-        }
-      } else {
-        parsedContent = msg.content
-      }
-      const funcName = toolIdToName[msg.tool_call_id] ?? msg.name ?? 'unknown_function'
-      pendingToolParts.push({
-        functionResponse: {
-          name: funcName,
-          response: { result: parsedContent },
-          id: msg.tool_call_id,
-        },
-      })
-      continue
-    }
-
-    const role = msg.role === 'assistant' ? 'model' : 'user'
-    const parts: GeminiContent['parts'] = []
-
-    if (typeof msg.content === 'string' && msg.content) {
-      parts.push({ text: msg.content })
-    } else if (Array.isArray(msg.content)) {
-      for (const part of msg.content) {
-        if (part.type === 'text' && part.text) {
-          parts.push({ text: part.text })
-        }
-      }
-    }
-
-    if (msg.tool_calls) {
-      for (const tc of msg.tool_calls) {
-        let args: Record<string, unknown> = {}
-        try {
-          args = JSON.parse(tc.function.arguments)
-        } catch {}
-        const funcPart: GeminiContent['parts'][0] = {
-          functionCall: {
-            name: tc.function.name,
-            args,
-            id: tc.id,
-          },
-        }
-        if (tc.thought_signature) {
-          funcPart.thoughtSignature = tc.thought_signature
-        }
-        parts.push(funcPart)
-      }
-    }
-
-    if (parts.length > 0) {
-      contents.push({ role, parts })
-    }
-  }
-
-  if (pendingToolParts.length > 0) {
-    contents.push({ role: 'user', parts: pendingToolParts })
-  }
-
-  return { contents, systemInstruction }
-}
-
-function convertToolsToGemini(tools: ChatCompletionRequest['tools']): GeminiTool[] | undefined {
-  if (!tools?.length) return undefined
-
-  const functionDeclarations = tools.map((tool) => ({
-    name: /^\d/.test(tool.function.name) ? `t_${tool.function.name}` : tool.function.name,
-    description: tool.function.description,
-    parameters: ensureObjectSchema(tool.function.parameters as Record<string, unknown>),
-  }))
-
-  return [{ functionDeclarations }]
 }
 
 function convertGeminiToOpenAI(
@@ -432,8 +324,8 @@ export async function handleChatCompletion(
 ): Promise<ChatCompletionResponse | Response> {
   const effectiveModel = resolveModelName(request.model)
   
-  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
-  const tools = convertToolsToGemini(request.tools)
+  const { contents, systemInstruction } = convertOpenAIMessagesToGemini(request.messages as OpenAIMessage[])
+  const tools = convertOpenAIToolsToGemini(request.tools)
 
   const inToolLoop = isInToolLoop(contents)
   const hasThinking = hasThinkingInHistory(contents)
@@ -461,7 +353,7 @@ export async function handleChatCompletion(
     generationConfig.thinkingConfig = thinkingConfig
     if (thinkingConfig.thinkingBudget && isClaudeModel(effectiveModel)) {
       const currentMax = (generationConfig.maxOutputTokens as number | undefined) ?? 8192
-      const requiredMax = thinkingConfig.thinkingBudget + 4096
+      const requiredMax = thinkingConfig.thinkingBudget + THINKING_OUTPUT_BUFFER
       if (currentMax <= thinkingConfig.thinkingBudget) {
         generationConfig.maxOutputTokens = requiredMax
       }
@@ -517,8 +409,8 @@ export async function handleChatCompletionStream(
 ): Promise<ReadableStream<Uint8Array> | Response> {
   const effectiveModel = resolveModelName(request.model)
   
-  const { contents, systemInstruction } = convertMessagesToGemini(request.messages)
-  const tools = convertToolsToGemini(request.tools)
+  const { contents, systemInstruction } = convertOpenAIMessagesToGemini(request.messages as OpenAIMessage[])
+  const tools = convertOpenAIToolsToGemini(request.tools)
 
   const inToolLoop = isInToolLoop(contents)
   const hasThinking = hasThinkingInHistory(contents)
@@ -546,7 +438,7 @@ export async function handleChatCompletionStream(
     generationConfig.thinkingConfig = thinkingConfig
     if (thinkingConfig.thinkingBudget && isClaudeModel(effectiveModel)) {
       const currentMax = (generationConfig.maxOutputTokens as number | undefined) ?? 8192
-      const requiredMax = thinkingConfig.thinkingBudget + 4096
+      const requiredMax = thinkingConfig.thinkingBudget + THINKING_OUTPUT_BUFFER
       if (currentMax <= thinkingConfig.thinkingBudget) {
         generationConfig.maxOutputTokens = requiredMax
       }
