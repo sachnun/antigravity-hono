@@ -40,12 +40,18 @@ const ThinkingContentBlockSchema = z.object({
   signature: z.string(),
 })
 
+const RedactedThinkingContentBlockSchema = z.object({
+  type: z.literal('redacted_thinking'),
+  data: z.string(),
+})
+
 const ContentBlockSchema = z.union([
   TextContentBlockSchema,
   ImageContentBlockSchema,
   ToolUseContentBlockSchema,
   ToolResultContentBlockSchema,
   ThinkingContentBlockSchema,
+  RedactedThinkingContentBlockSchema,
 ])
 
 const MessageContentSchema = z.union([

@@ -3,12 +3,9 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { z } from '@hono/zod-openapi'
 import {
-  SearchBodySchema,
-  SearchResponseSchema,
   ErrorSchema,
 } from './schemas'
 import { authorizeAntigravity, exchangeAntigravity, refreshAccessToken } from './oauth'
-import { executeSearch } from './search'
 import {
   handleChatCompletion,
   handleChatCompletionStream,
@@ -59,33 +56,6 @@ app.post('/auth/refresh', async (c) => {
   const body = await c.req.json<{ refreshToken: string }>()
   const result = await refreshAccessToken(body.refreshToken)
   return c.json(result)
-})
-
-const searchRoute = createRoute({
-  method: 'post',
-  path: '/search',
-  tags: ['Search'],
-  summary: 'Execute Google Search',
-  description: 'Search the web using Google Search via Antigravity API',
-  request: {
-    body: { content: { 'application/json': { schema: SearchBodySchema } } },
-  },
-  responses: {
-    200: {
-      content: { 'application/json': { schema: SearchResponseSchema } },
-      description: 'Search results',
-    },
-    500: {
-      content: { 'application/json': { schema: ErrorSchema } },
-      description: 'Search API error',
-    },
-  },
-})
-
-app.openapi(searchRoute, async (c) => {
-  const { query, urls, thinking, accessToken, projectId } = c.req.valid('json')
-  const result = await executeSearch({ query, urls, thinking }, accessToken, projectId)
-  return c.json(result, 200)
 })
 
 app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {

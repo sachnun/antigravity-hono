@@ -37,27 +37,6 @@ export const RefreshResponseSchema = z.object({
   refreshToken: z.string().optional().openapi({ example: '1//0g...' }),
 }).openapi('RefreshResponse')
 
-export const SearchBodySchema = z.object({
-  query: z.string().min(1).openapi({ example: 'What is the latest news about AI?' }),
-  urls: z.array(z.string().url()).optional().openapi({ example: ['https://example.com/article'] }),
-  thinking: z.boolean().optional().default(true).openapi({ example: true }),
-  accessToken: z.string().openapi({ example: 'ya29.a0AX...' }),
-  projectId: z.string().openapi({ example: 'my-project-123' }),
-}).openapi('SearchRequest')
-
-export const SearchResponseSchema = z.object({
-  text: z.string().openapi({ example: '## Search Results\n\nHere are the latest...' }),
-  sources: z.array(z.object({
-    title: z.string(),
-    url: z.string().url(),
-  })).openapi({ example: [{ title: 'AI News', url: 'https://example.com' }] }),
-  searchQueries: z.array(z.string()).openapi({ example: ['latest AI news 2024'] }),
-  urlsRetrieved: z.array(z.object({
-    url: z.string().url(),
-    status: z.string(),
-  })).openapi({ example: [{ url: 'https://example.com', status: 'URL_RETRIEVAL_STATUS_SUCCESS' }] }),
-}).openapi('SearchResponse')
-
 export const ErrorSchema = z.object({
   error: z.string().openapi({ example: 'Invalid request' }),
   details: z.string().optional().openapi({ example: 'Missing required field: code' }),

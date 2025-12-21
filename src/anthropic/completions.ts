@@ -1,7 +1,4 @@
-import {
-  CODE_ASSIST_ENDPOINT,
-  CODE_ASSIST_HEADERS,
-} from '../constants'
+import { apiRequest } from '../shared/fetch-with-fallback'
 import type {
   AnthropicMessageRequest,
   AnthropicMessageResponse,
@@ -113,6 +110,12 @@ function convertMessagesToGemini(
             text: block.thinking,
             thought: true,
             thoughtSignature: block.signature,
+          })
+        } else if (block.type === 'redacted_thinking') {
+          parts.push({
+            text: '',
+            thought: true,
+            thoughtSignature: block.data,
           })
         }
       }
@@ -270,15 +273,10 @@ export async function handleAnthropicMessage(
     return collectStreamingResponse(wrappedBody, accessToken, resolvedModel, true)
   }
 
-  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:generateContent`
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...CODE_ASSIST_HEADERS,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(wrappedBody),
+  const response = await apiRequest({
+    path: '/v1internal:generateContent',
+    body: wrappedBody,
+    accessToken,
   })
 
   if (!response.ok) {
@@ -306,17 +304,11 @@ async function collectStreamingResponse(
   model: string,
   includeThinking: boolean
 ): Promise<AnthropicMessageResponse> {
-  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...CODE_ASSIST_HEADERS,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(wrappedBody),
+  const response = await apiRequest({
+    path: '/v1internal:streamGenerateContent?alt=sse',
+    body: wrappedBody,
+    accessToken,
+    stream: true,
   })
 
   if (!response.ok) {
@@ -501,17 +493,11 @@ export async function handleAnthropicMessageStream(
     request: { ...geminiRequest, sessionId: generateRequestId() },
   }
 
-  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...CODE_ASSIST_HEADERS,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(wrappedBody),
+  const response = await apiRequest({
+    path: '/v1internal:streamGenerateContent?alt=sse',
+    body: wrappedBody,
+    accessToken,
+    stream: true,
   })
 
   if (!response.ok) {

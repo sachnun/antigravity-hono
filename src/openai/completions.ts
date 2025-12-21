@@ -1,7 +1,4 @@
-import {
-  CODE_ASSIST_ENDPOINT,
-  CODE_ASSIST_HEADERS,
-} from '../constants'
+import { apiRequest } from '../shared/fetch-with-fallback'
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -300,17 +297,11 @@ async function collectStreamingResponse(
   model: string,
   includeThoughts: boolean
 ): Promise<ChatCompletionResponse> {
-  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...CODE_ASSIST_HEADERS,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(wrappedBody),
+  const response = await apiRequest({
+    path: '/v1internal:streamGenerateContent?alt=sse',
+    body: wrappedBody,
+    accessToken,
+    stream: true,
   })
 
   if (!response.ok) {
@@ -498,16 +489,10 @@ export async function handleChatCompletion(
     return collectStreamingResponse(wrappedBody, accessToken, request.model, shouldIncludeThoughts)
   }
 
-  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:generateContent`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...CODE_ASSIST_HEADERS,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(wrappedBody),
+  const response = await apiRequest({
+    path: '/v1internal:generateContent',
+    body: wrappedBody,
+    accessToken,
   })
 
   if (!response.ok) {
@@ -583,17 +568,11 @@ export async function handleChatCompletionStream(
     request: { ...geminiRequest, sessionId: generateRequestId() },
   }
 
-  const url = `${CODE_ASSIST_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...CODE_ASSIST_HEADERS,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify(wrappedBody),
+  const response = await apiRequest({
+    path: '/v1internal:streamGenerateContent?alt=sse',
+    body: wrappedBody,
+    accessToken,
+    stream: true,
   })
 
   if (!response.ok) {
