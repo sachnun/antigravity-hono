@@ -24,6 +24,11 @@ export const CODE_ASSIST_ENDPOINT_FALLBACKS = [
   CODE_ASSIST_ENDPOINT_PROD,
 ] as const
 
+export const CODE_ASSIST_ENDPOINTS = [
+  CODE_ASSIST_ENDPOINT_DAILY,
+  CODE_ASSIST_ENDPOINT_PROD,
+] as const
+
 export const CODE_ASSIST_ENDPOINT = CODE_ASSIST_ENDPOINT_DAILY
 
 export const CODE_ASSIST_HEADERS = {
@@ -31,11 +36,6 @@ export const CODE_ASSIST_HEADERS = {
   'X-Goog-Api-Client': ANTIGRAVITY_API_CLIENT,
   'Client-Metadata': ANTIGRAVITY_CLIENT_METADATA,
 } as const
-
-export const SEARCH_MODEL = 'gemini-2.5-flash'
-export const SEARCH_THINKING_BUDGET_FAST = 4096
-export const SEARCH_THINKING_BUDGET_DEEP = 16384
-export const SEARCH_TIMEOUT_MS = 60 * 1000
 
 export const QUOTA_GROUPS: Record<string, string[]> = {
   claude: [
