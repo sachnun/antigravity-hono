@@ -18,6 +18,38 @@ export interface GeminiTool {
   }>
 }
 
+export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high'
+
+export interface ThinkingConfig {
+  thinkingLevel?: ThinkingLevel
+  thinkingBudget?: number
+  includeThoughts?: boolean
+}
+
+export interface GeminiGenerationConfig {
+  maxOutputTokens?: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  stopSequences?: string[]
+  thinkingConfig?: ThinkingConfig
+}
+
+export interface GeminiRequest {
+  contents: GeminiContent[]
+  generationConfig?: GeminiGenerationConfig
+  systemInstruction?: { parts: Array<{ text: string }> }
+  tools?: GeminiTool[]
+}
+
+export interface AntigravityRequestBody {
+  project: string
+  model: string
+  userAgent: string
+  requestId: string
+  request: GeminiRequest & { sessionId: string }
+}
+
 export interface AntigravityResponse {
   response?: {
     candidates?: Array<{

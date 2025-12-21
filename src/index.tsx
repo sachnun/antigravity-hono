@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
+import { createMiddleware } from 'hono/factory'
 import { z } from '@hono/zod-openapi'
 import {
   ErrorSchema,
@@ -19,21 +20,20 @@ import {
 import {
   handleAnthropicMessage,
   handleAnthropicMessageStream,
-  listAnthropicModels,
-  getAnthropicModel,
   isValidAnthropicModel,
   AnthropicMessageRequestSchema,
   AnthropicMessageResponseSchema,
-  AnthropicModelsListResponseSchema,
   AnthropicErrorSchema,
 } from './anthropic'
-import { getValidAccessToken, setStoredToken, handleTokenRefresh, markRateLimited, parseRateLimitDelay, getAllTokens, getTokenWithAutoWait, type StoredToken } from './storage'
+import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, type StoredToken } from './storage'
+import { withTokenRotation, type TokenInfo } from './shared/token-rotation'
 import { AuthPage } from './auth-ui'
 
 type Bindings = {
   DB: D1Database
   ADMIN_KEY?: string
   API_KEY?: string
+  ENVIRONMENT?: string
 }
 
 const app = new OpenAPIHono<{ Bindings: Bindings }>()
@@ -226,40 +226,18 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
     }, 404)
   }
 
-  const allTokens = await getAllTokens(c.env.DB)
-  if (allTokens.length === 0) {
-    return c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401)
-  }
-
-  const triedEmails: string[] = []
-  let lastError: Error | null = null
-
-  for (let attempt = 0; attempt < allTokens.length + 1; attempt++) {
-    const stored = await getTokenWithAutoWait(c.env.DB, body.model, triedEmails)
-    if (!stored) {
-      if (triedEmails.length > 0) {
-        return c.json({ error: 'All accounts rate limited', details: `Tried ${triedEmails.length} accounts` }, 429)
-      }
-      return c.json({ error: 'All accounts rate limited' }, 429)
-    }
-
-    const { accessToken, projectId, email } = stored
-    if (!triedEmails.includes(email)) {
-      triedEmails.push(email)
-    }
-
-    try {
+  const result = await withTokenRotation(
+    c.env.DB,
+    {
+      model: body.model,
+      formatNoTokenError: () => c.json({ error: 'No valid token available', details: 'Set up token via /auth' }, 401) as unknown as Response,
+      formatRateLimitError: (count) => c.json({ error: 'All accounts rate limited', details: count > 0 ? `Tried ${count} accounts` : undefined }, 429) as unknown as Response,
+      formatAllExhaustedError: () => c.json({ error: 'All accounts exhausted' }, 429) as unknown as Response,
+    },
+    async (token: TokenInfo) => {
       if (body.stream) {
-        const stream = await handleChatCompletionStream(body, accessToken, projectId)
-        if (stream instanceof Response) {
-          if (stream.status === 429) {
-            const errorText = await stream.clone().text()
-            const delayMs = parseRateLimitDelay(errorText) ?? 60000
-            await markRateLimited(c.env.DB, email, body.model, delayMs)
-            continue
-          }
-          return stream
-        }
+        const stream = await handleChatCompletionStream(body, token.accessToken, token.projectId)
+        if (stream instanceof Response) return stream
         return new Response(stream, {
           headers: {
             'Content-Type': 'text/event-stream',
@@ -269,29 +247,13 @@ app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
         })
       }
 
-      const result = await handleChatCompletion(body, accessToken, projectId)
-      if (result instanceof Response) {
-        if (result.status === 429) {
-          const errorText = await result.clone().text()
-          const delayMs = parseRateLimitDelay(errorText) ?? 60000
-          await markRateLimited(c.env.DB, email, body.model, delayMs)
-          continue
-        }
-        return result
-      }
-      return c.json(result, 200)
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('429')) {
-        await markRateLimited(c.env.DB, email, body.model, 60000)
-        lastError = e
-        continue
-      }
-      throw e
+      const completionResult = await handleChatCompletion(body, token.accessToken, token.projectId)
+      if (completionResult instanceof Response) return completionResult
+      return c.json(completionResult, 200) as unknown as Response
     }
-  }
+  )
 
-  if (lastError) throw lastError
-  return c.json({ error: 'All accounts exhausted' }, 429)
+  return result as Response
 })
 
 const modelsListRoute = createRoute({
@@ -506,49 +468,27 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
     }, 400)
   }
 
-  const allTokens = await getAllTokens(c.env.DB)
-  if (allTokens.length === 0) {
-    return c.json({
-      type: 'error',
-      error: { type: 'authentication_error', message: 'No valid token available' },
-    }, 401)
-  }
-
-  const triedEmails: string[] = []
-  let lastError: Error | null = null
-
-  for (let attempt = 0; attempt < allTokens.length + 1; attempt++) {
-    const stored = await getTokenWithAutoWait(c.env.DB, body.model, triedEmails)
-    if (!stored) {
-      if (triedEmails.length > 0) {
-        return c.json({
-          type: 'error',
-          error: { type: 'rate_limit_error', message: `All ${triedEmails.length} accounts rate limited` },
-        }, 429)
-      }
-      return c.json({
+  const result = await withTokenRotation(
+    c.env.DB,
+    {
+      model: body.model,
+      formatNoTokenError: () => c.json({
         type: 'error',
-        error: { type: 'rate_limit_error', message: 'All accounts rate limited' },
-      }, 429)
-    }
-
-    const { accessToken, projectId, email } = stored
-    if (!triedEmails.includes(email)) {
-      triedEmails.push(email)
-    }
-
-    try {
+        error: { type: 'authentication_error', message: 'No valid token available' },
+      }, 401) as unknown as Response,
+      formatRateLimitError: (count) => c.json({
+        type: 'error',
+        error: { type: 'rate_limit_error', message: count > 0 ? `All ${count} accounts rate limited` : 'All accounts rate limited' },
+      }, 429) as unknown as Response,
+      formatAllExhaustedError: () => c.json({
+        type: 'error',
+        error: { type: 'rate_limit_error', message: 'All accounts exhausted' },
+      }, 429) as unknown as Response,
+    },
+    async (token: TokenInfo) => {
       if (body.stream) {
-        const stream = await handleAnthropicMessageStream(body, accessToken, projectId)
-        if (stream instanceof Response) {
-          if (stream.status === 429) {
-            const errorText = await stream.clone().text()
-            const delayMs = parseRateLimitDelay(errorText) ?? 60000
-            await markRateLimited(c.env.DB, email, body.model, delayMs)
-            continue
-          }
-          return stream
-        }
+        const stream = await handleAnthropicMessageStream(body, token.accessToken, token.projectId)
+        if (stream instanceof Response) return stream
         return new Response(stream, {
           headers: {
             'Content-Type': 'text/event-stream',
@@ -558,42 +498,24 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
         })
       }
 
-      const result = await handleAnthropicMessage(body, accessToken, projectId)
-      if (result instanceof Response) {
-        if (result.status === 429) {
-          const errorText = await result.clone().text()
-          const delayMs = parseRateLimitDelay(errorText) ?? 60000
-          await markRateLimited(c.env.DB, email, body.model, delayMs)
-          continue
-        }
-        return result
-      }
-      return c.json(result, 200)
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('429')) {
-        await markRateLimited(c.env.DB, email, body.model, 60000)
-        lastError = e
-        continue
-      }
-      throw e
+      const messageResult = await handleAnthropicMessage(body, token.accessToken, token.projectId)
+      if (messageResult instanceof Response) return messageResult
+      return c.json(messageResult, 200) as unknown as Response
     }
-  }
+  )
 
-  if (lastError) throw lastError
-  return c.json({
-    type: 'error',
-    error: { type: 'rate_limit_error', message: 'All accounts exhausted' },
-  }, 429)
+  return result as Response
 })
 
-app.post('/admin/token', async (c) => {
+const adminAuth = createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
   const adminKey = c.env.ADMIN_KEY
-  const authHeader = c.req.header('Authorization')
-  
-  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
+  if (adminKey && c.req.header('Authorization') !== `Bearer ${adminKey}`) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
+  await next()
+})
 
+app.post('/admin/token', adminAuth, async (c) => {
   const body = await c.req.json<{
     refreshToken: string
     accessToken?: string
@@ -627,15 +549,7 @@ app.post('/admin/token', async (c) => {
   return c.json({ success: true, email: token.email, expiresAt: token.expiresAt })
 })
 
-app.get('/admin/token', async (c) => {
-  const adminKey = c.env.ADMIN_KEY
-  const authHeader = c.req.header('Authorization')
-  
-  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
-  const { getAllTokens } = await import('./storage')
+app.get('/admin/token', adminAuth, async (c) => {
   const tokens = await getAllTokens(c.env.DB)
   if (tokens.length === 0) {
     return c.json({ error: 'No token stored' }, 404)
@@ -644,14 +558,7 @@ app.get('/admin/token', async (c) => {
   return c.json({ hasToken: true, count: tokens.length })
 })
 
-app.post('/admin/token/refresh', async (c) => {
-  const adminKey = c.env.ADMIN_KEY
-  const authHeader = c.req.header('Authorization')
-  
-  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
+app.post('/admin/token/refresh', adminAuth, async (c) => {
   const result = await handleTokenRefresh(c.env.DB)
   if (!result.success) {
     return c.json({ error: result.errors.join(', ') }, 400)
@@ -660,20 +567,12 @@ app.post('/admin/token/refresh', async (c) => {
   return c.json({ success: true, refreshed: result.refreshed })
 })
 
-app.delete('/admin/token', async (c) => {
-  const adminKey = c.env.ADMIN_KEY
-  const authHeader = c.req.header('Authorization')
-  
-  if (adminKey && authHeader !== `Bearer ${adminKey}`) {
-    return c.json({ error: 'Unauthorized' }, 401)
-  }
-
+app.delete('/admin/token', adminAuth, async (c) => {
   const email = c.req.query('email')
   if (!email) {
     return c.json({ error: 'Missing email parameter' }, 400)
   }
 
-  const { deleteStoredToken } = await import('./storage')
   await deleteStoredToken(c.env.DB, email)
   return c.json({ success: true })
 })
@@ -687,7 +586,6 @@ app.get('/admin/accounts', async (c) => {
   const authHeader = c.req.header('Authorization')
   const isAdmin = !adminKey || authHeader === `Bearer ${adminKey}`
 
-  const { getAllTokens, getAllAccountsQuota } = await import('./storage')
   const quotas = await getAllAccountsQuota(c.env.DB)
 
   const maskEmail = (email: string) => {
@@ -750,7 +648,8 @@ app.post('/auth/callback', async (c) => {
 })
 
 app.onError((err, c) => {
-  return c.json({ error: err.message, details: err.stack }, 500)
+  const isDev = c.env.ENVIRONMENT === 'development'
+  return c.json({ error: err.message, details: isDev ? err.stack : undefined }, 500)
 })
 
 export default {
