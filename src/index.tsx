@@ -27,10 +27,10 @@ import {
 } from './anthropic'
 import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, warmUpAllAccounts, type StoredToken } from './storage'
 import { withTokenRotation, type TokenInfo } from './shared/token-rotation'
-import { AuthPage } from './auth-ui'
 
 type Bindings = {
   DB: D1Database
+  ASSETS: Fetcher
   ADMIN_KEY?: string
   API_KEY?: string
   ENVIRONMENT?: string
@@ -312,9 +312,7 @@ app.openapi(modelRetrieveRoute, async (c) => {
   return c.json(result, 200)
 })
 
-app.get('/', swaggerUI({ url: '/openapi.json' }))
-
-app.get('/v1', (c) => c.redirect('/'))
+app.get('/docs', swaggerUI({ url: '/openapi.json' }))
 
 const anthropicMessagesRoute = createRoute({
   method: 'post',
@@ -582,8 +580,8 @@ app.delete('/admin/token', adminAuth, async (c) => {
   return c.json({ success: true })
 })
 
-app.get('/auth', (c) => {
-  return c.html(<AuthPage />)
+app.get('/auth', async (c) => {
+  return c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
 })
 
 app.get('/admin/accounts', async (c) => {
@@ -657,9 +655,20 @@ app.onError((err, c) => {
   return c.json({ error: err.message, details: isDev ? err.stack : undefined }, 500)
 })
 
+app.notFound((c) => {
+  return c.json({
+    error: {
+      message: 'The requested resource could not be found',
+      type: 'invalid_request_error',
+      param: null,
+      code: 'not_found'
+    }
+  }, 404)
+})
+
 export default {
   fetch: app.fetch,
-  async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+  async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
       Promise.all([
         handleTokenRefresh(env.DB).then((result) => {
