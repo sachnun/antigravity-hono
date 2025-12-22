@@ -658,11 +658,7 @@ app.onError((err, c) => {
 })
 
 app.notFound(async (c) => {
-  const url = new URL(c.req.url)
-  if (url.pathname.startsWith('/v1/') || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/auth/')) {
-    return c.json({ error: 'Not found' }, 404)
-  }
-  return c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
+  return c.json({ error: 'Not found' }, 404)
 })
 
 export default {
