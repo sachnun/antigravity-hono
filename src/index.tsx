@@ -567,6 +567,11 @@ app.post('/admin/token/refresh', adminAuth, async (c) => {
   return c.json({ success: true, refreshed: result.refreshed })
 })
 
+app.post('/admin/warmup', adminAuth, async (c) => {
+  const results = await warmUpAllAccounts(c.env.DB)
+  return c.json({ results })
+})
+
 app.delete('/admin/token', adminAuth, async (c) => {
   const email = c.req.query('email')
   if (!email) {

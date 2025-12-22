@@ -320,6 +320,7 @@ const App = () => {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [warmingUp, setWarmingUp] = useState(false)
 
   const loadAccounts = async () => {
     try {
@@ -382,6 +383,25 @@ const App = () => {
     setRefreshing(false)
   }
 
+  const handleWarmup = async () => {
+    setWarmingUp(true)
+    try {
+      const res = await fetch('/admin/warmup', { method: 'POST', headers: getAuthHeaders() })
+      const data = (await res.json()) as { results?: Array<{ email: string; warmedUp: string[]; skipped: string[]; errors: Array<{ group: string; error: string }> }> }
+      if (res.ok && data.results) {
+        const warmed = data.results.filter(r => r.warmedUp.length > 0)
+        const skipped = data.results.filter(r => r.skipped.length > 0 && r.warmedUp.length === 0)
+        alert(`Warmup complete!\nWarmed: ${warmed.length} account(s)\nSkipped: ${skipped.length} account(s)`)
+        loadAccounts()
+      } else {
+        alert('Warmup failed')
+      }
+    } catch {
+      alert('Warmup failed')
+    }
+    setWarmingUp(false)
+  }
+
   return (
     <div class="max-w-5xl w-full mx-auto">
       <div class="flex justify-between items-center mb-6">
@@ -404,13 +424,22 @@ const App = () => {
           <div class="flex justify-between items-center mb-3">
             <div class="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Accounts</div>
             {isAdmin && (
-              <button
-                class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors disabled:opacity-50"
-                onClick={handleRefreshAll}
-                disabled={refreshing}
-              >
-                {refreshing ? 'Refreshing...' : 'Refresh All'}
-              </button>
+              <div class="flex gap-2">
+                <button
+                  class="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors disabled:opacity-50"
+                  onClick={handleRefreshAll}
+                  disabled={refreshing}
+                >
+                  {refreshing ? 'Refreshing...' : 'Refresh All'}
+                </button>
+                <button
+                  class="px-3 py-1.5 text-xs font-medium rounded bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
+                  onClick={handleWarmup}
+                  disabled={warmingUp}
+                >
+                  {warmingUp ? 'Warming...' : 'Warmup'}
+                </button>
+              </div>
             )}
           </div>
 
