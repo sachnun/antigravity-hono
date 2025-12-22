@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useAccounts, useDeleteAccount, useRefreshTokens, useWarmup } from '@/hooks/useAccounts'
 import { AccountCard } from '@/components/AccountCard'
 import { LoginForm } from '@/components/LoginForm'
@@ -6,7 +6,6 @@ import { AddAccountForm } from '@/components/AddAccountForm'
 import { Toaster, toast } from '@/components/Toast'
 
 export const App = () => {
-  const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem('adminKey'))
   const { data, isLoading, refetch } = useAccounts()
 
   const deleteMutation = useDeleteAccount()
@@ -14,17 +13,15 @@ export const App = () => {
   const warmupMutation = useWarmup()
 
   const accounts = data?.accounts ?? []
-  const actualIsAdmin = data?.isAdmin ?? false
+  const isAdmin = data?.isAdmin ?? false
 
   const handleLogin = useCallback((key: string) => {
     localStorage.setItem('adminKey', key)
-    setIsAdmin(true)
     refetch()
   }, [refetch])
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('adminKey')
-    setIsAdmin(false)
     refetch()
   }, [refetch])
 
@@ -61,7 +58,7 @@ export const App = () => {
             <h1 className="text-2xl font-semibold text-white">Antigravity Auth</h1>
             <p className="text-neutral-500 text-sm">Multi-account Google OAuth token management</p>
           </div>
-          {actualIsAdmin && (
+          {isAdmin && (
             <button
               className="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors"
               onClick={handleLogout}
@@ -75,7 +72,7 @@ export const App = () => {
           <div className="lg:col-span-3 p-5 bg-neutral-900 rounded-lg border border-neutral-800">
             <div className="flex justify-between items-center mb-3">
               <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Accounts</div>
-              {actualIsAdmin && (
+              {isAdmin && (
                 <div className="flex gap-2">
                   <button
                     className="px-3 py-1.5 text-xs font-medium rounded bg-neutral-700 hover:bg-neutral-600 text-white transition-colors disabled:opacity-50"
@@ -103,7 +100,7 @@ export const App = () => {
             ) : (
               <div className="flex items-center gap-2 p-3 rounded-md text-sm bg-green-500/10 border border-green-500/30 text-green-500">
                 <span className="w-2 h-2 rounded-full bg-current" />
-                <span>{accounts.length} account(s) {actualIsAdmin ? 'configured' : 'available'}</span>
+                <span>{accounts.length} account(s) {isAdmin ? 'configured' : 'available'}</span>
               </div>
             )}
 
@@ -112,8 +109,8 @@ export const App = () => {
                 <AccountCard
                   key={account.email}
                   account={account}
-                  isAdmin={actualIsAdmin}
-                  onDelete={actualIsAdmin ? handleDelete : undefined}
+                  isAdmin={isAdmin}
+                  onDelete={isAdmin ? handleDelete : undefined}
                 />
               ))}
             </div>
@@ -121,7 +118,7 @@ export const App = () => {
 
           <div className="lg:col-span-2 space-y-4">
             {!isAdmin && <LoginForm onLogin={handleLogin} />}
-            {actualIsAdmin && <AddAccountForm onSuccess={refetch} />}
+            {isAdmin && <AddAccountForm onSuccess={refetch} />}
           </div>
         </div>
       </div>
