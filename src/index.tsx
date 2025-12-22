@@ -25,7 +25,7 @@ import {
   AnthropicMessageResponseSchema,
   AnthropicErrorSchema,
 } from './anthropic'
-import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, type StoredToken } from './storage'
+import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, warmUpAllAccounts, type StoredToken } from './storage'
 import { withTokenRotation, type TokenInfo } from './shared/token-rotation'
 import { AuthPage } from './auth-ui'
 
@@ -656,9 +656,21 @@ export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
-      handleTokenRefresh(env.DB).then((result) => {
-        console.log('Token refresh result:', result)
-      })
+      Promise.all([
+        handleTokenRefresh(env.DB).then((result) => {
+          console.log('Token refresh result:', result)
+        }),
+        warmUpAllAccounts(env.DB).then((results) => {
+          for (const r of results) {
+            if (r.warmedUp.length > 0) {
+              console.log(`Warmed up ${r.email}: ${r.warmedUp.join(', ')}`)
+            }
+            if (r.errors.length > 0) {
+              console.log(`Warmup errors for ${r.email}:`, r.errors)
+            }
+          }
+        }),
+      ])
     )
   },
 }
