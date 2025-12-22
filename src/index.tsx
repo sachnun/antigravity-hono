@@ -312,9 +312,7 @@ app.openapi(modelRetrieveRoute, async (c) => {
   return c.json(result, 200)
 })
 
-app.get('/', swaggerUI({ url: '/openapi.json' }))
-
-app.get('/v1', (c) => c.redirect('/'))
+app.get('/docs', swaggerUI({ url: '/openapi.json' }))
 
 const anthropicMessagesRoute = createRoute({
   method: 'post',
