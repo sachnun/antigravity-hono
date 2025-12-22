@@ -26,45 +26,6 @@ wrangler secret put API_KEY
 bun run deploy
 ```
 
-## API Endpoints
-
-### Chat Completions
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/v1/chat/completions` | POST | API_KEY | OpenAI-compatible |
-| `/v1/messages` | POST | API_KEY | Anthropic-compatible |
-| `/v1/models` | GET | - | List models |
-| `/v1/models/{model}` | GET | - | Get model by ID |
-
-### Auth
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/auth` | GET | Auth web UI |
-| `/auth/authorize` | GET | Start OAuth flow |
-| `/auth/exchange` | POST | Exchange code for tokens |
-| `/auth/callback` | POST | OAuth callback (saves token) |
-| `/auth/refresh` | POST | Refresh access token |
-
-### Admin
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/admin/token` | GET | ADMIN_KEY | Check token status |
-| `/admin/token` | POST | ADMIN_KEY | Add token manually |
-| `/admin/token` | DELETE | ADMIN_KEY | Delete token by email |
-| `/admin/token/refresh` | POST | ADMIN_KEY | Force refresh all tokens |
-| `/admin/warmup` | POST | ADMIN_KEY | Warm up all accounts |
-| `/admin/accounts` | GET | - | List accounts (masked for public) |
-
-### Docs
-
-| Endpoint | Description |
-|----------|-------------|
-| `/docs` | Swagger UI |
-| `/openapi.json` | OpenAPI spec |
-
 ## Models
 
 ### OpenAI-compatible (`/v1/chat/completions`)
