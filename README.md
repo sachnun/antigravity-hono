@@ -35,33 +35,46 @@ bun run deploy
 | `/v1/chat/completions` | POST | API_KEY | OpenAI-compatible |
 | `/v1/messages` | POST | API_KEY | Anthropic-compatible |
 | `/v1/models` | GET | - | List models |
-| `/search` | POST | accessToken | Google Search |
+| `/v1/models/{model}` | GET | - | Get model by ID |
 
-### Admin
+### Auth
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/admin/token` | GET/POST/DELETE | Token management |
-| `/admin/token/refresh` | POST | Force refresh tokens |
-| `/admin/accounts` | GET | List accounts |
+| `/auth` | GET | Auth web UI |
+| `/auth/authorize` | GET | Start OAuth flow |
+| `/auth/exchange` | POST | Exchange code for tokens |
+| `/auth/callback` | POST | OAuth callback (saves token) |
+| `/auth/refresh` | POST | Refresh access token |
+
+### Admin
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/admin/token` | GET | ADMIN_KEY | Check token status |
+| `/admin/token` | POST | ADMIN_KEY | Add token manually |
+| `/admin/token` | DELETE | ADMIN_KEY | Delete token by email |
+| `/admin/token/refresh` | POST | ADMIN_KEY | Force refresh all tokens |
+| `/admin/warmup` | POST | ADMIN_KEY | Warm up all accounts |
+| `/admin/accounts` | GET | - | List accounts (masked for public) |
 
 ### Docs
 
 | Endpoint | Description |
 |----------|-------------|
-| `/` | Swagger UI |
+| `/docs` | Swagger UI |
 | `/openapi.json` | OpenAPI spec |
 
 ## Models
 
 ### OpenAI-compatible (`/v1/chat/completions`)
 
-- `gemini-3-pro-preview` - Gemini 3 Pro (thinkingLevel)
-- `gemini-3-flash` - Gemini 3 Flash (thinkingLevel)
-- `gemini-2.5-flash` - Gemini 2.5 Flash (thinkingBudget)
-- `gemini-2.5-flash-lite` - Gemini 2.5 Flash Lite (thinkingBudget)
-- `claude-sonnet-4-5` - Claude Sonnet 4.5 (thinkingBudget)
-- `claude-opus-4-5` - Claude Opus 4.5 (thinkingBudget)
+- `gemini-3-pro-preview` - Gemini 3 Pro
+- `gemini-3-flash` - Gemini 3 Flash
+- `gemini-2.5-flash` - Gemini 2.5 Flash
+- `gemini-2.5-flash-lite` - Gemini 2.5 Flash Lite
+- `claude-sonnet-4-5` - Claude Sonnet 4.5
+- `claude-opus-4-5` - Claude Opus 4.5
 - `gpt-oss-120b-medium` - GPT-OSS 120B
 
 ### Anthropic-compatible (`/v1/messages`)
