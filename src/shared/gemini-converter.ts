@@ -6,6 +6,8 @@ export interface OpenAIMessage {
   content?: string | Array<{ type: string; text?: string }>
   name?: string
   tool_call_id?: string
+  reasoning_content?: string
+  thought_signature?: string
   tool_calls?: Array<{
     id: string
     type: string
@@ -106,6 +108,17 @@ export function convertOpenAIMessagesToGemini(messages: OpenAIMessage[]): Conver
 
     const role = msg.role === 'assistant' ? 'model' : 'user'
     const parts: GeminiContent['parts'] = []
+
+    if (msg.reasoning_content && msg.role === 'assistant') {
+      const thoughtPart: GeminiContent['parts'][0] = {
+        text: msg.reasoning_content,
+        thought: true,
+      }
+      if (msg.thought_signature) {
+        thoughtPart.thoughtSignature = msg.thought_signature
+      }
+      parts.push(thoughtPart)
+    }
 
     if (typeof msg.content === 'string' && msg.content) {
       parts.push({ text: msg.content })

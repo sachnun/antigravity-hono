@@ -114,6 +114,7 @@ function convertGeminiToOpenAI(
 
   let content: string | null = null
   let reasoningContent: string | null = null
+  let thoughtSignature: string | undefined
   const toolCalls: Array<{
     id: string
     type: 'function'
@@ -125,6 +126,9 @@ function convertGeminiToOpenAI(
     if (part.text) {
       if (part.thought) {
         reasoningContent = (reasoningContent ?? '') + part.text
+        if (part.thoughtSignature) {
+          thoughtSignature = part.thoughtSignature
+        }
       } else {
         content = (content ?? '') + part.text
       }
@@ -167,6 +171,7 @@ function convertGeminiToOpenAI(
         role: 'assistant',
         content,
         reasoning_content: includeThoughts ? reasoningContent : undefined,
+        thought_signature: includeThoughts && thoughtSignature ? thoughtSignature : undefined,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         refusal: null,
       },
@@ -210,6 +215,7 @@ async function collectStreamingResponse(
 
   let content = ''
   let reasoningContent = ''
+  let thoughtSignature = ''
   let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' = 'stop'
   let usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined
   const toolCalls: ChatCompletionResponse['choices'][0]['message']['tool_calls'] = []
@@ -259,19 +265,26 @@ async function collectStreamingResponse(
           if (part.text) {
             if (part.thought) {
               reasoningContent += part.text
+              if (part.thoughtSignature) {
+                thoughtSignature = part.thoughtSignature
+              }
             } else {
               content += part.text
             }
           }
           if (part.functionCall) {
-            toolCalls.push({
+            const tc: NonNullable<ChatCompletionResponse['choices'][0]['message']['tool_calls']>[0] = {
               id: generateToolCallId(),
               type: 'function',
               function: {
                 name: part.functionCall.name,
                 arguments: JSON.stringify(part.functionCall.args),
               },
-            })
+            }
+            if (part.thoughtSignature) {
+              tc.thought_signature = part.thoughtSignature
+            }
+            toolCalls.push(tc)
           }
         }
 
@@ -307,6 +320,7 @@ async function collectStreamingResponse(
         role: 'assistant',
         content: content || null,
         reasoning_content: includeThoughts && reasoningContent ? reasoningContent : undefined,
+        thought_signature: includeThoughts && thoughtSignature ? thoughtSignature : undefined,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         refusal: null,
       },

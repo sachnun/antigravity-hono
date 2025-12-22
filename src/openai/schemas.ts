@@ -11,6 +11,12 @@ const MessageSchema = z.object({
     })),
   ]).nullable().optional().openapi({ example: 'Hello!' }),
   name: z.string().optional(),
+  reasoning_content: z.string().optional().openapi({
+    description: 'Thinking/reasoning content from a previous assistant response (for multi-turn)',
+  }),
+  thought_signature: z.string().optional().openapi({
+    description: 'Signature for thinking content verification (for multi-turn)',
+  }),
   tool_calls: z.array(z.object({
     id: z.string(),
     type: z.literal('function'),
@@ -99,6 +105,9 @@ const ChoiceMessageSchema = z.object({
   content: z.string().nullable(),
   reasoning_content: z.string().nullable().optional().openapi({
     description: 'Thinking/reasoning content from the model (when include_thoughts is true)',
+  }),
+  thought_signature: z.string().optional().openapi({
+    description: 'Signature for thinking content verification (for multi-turn with tools)',
   }),
   tool_calls: z.array(z.object({
     id: z.string(),
