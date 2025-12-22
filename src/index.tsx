@@ -655,8 +655,15 @@ app.onError((err, c) => {
   return c.json({ error: err.message, details: isDev ? err.stack : undefined }, 500)
 })
 
-app.notFound(async (c) => {
-  return c.json({ error: 'Not found' }, 404)
+app.notFound((c) => {
+  return c.json({
+    error: {
+      message: 'The requested resource could not be found',
+      type: 'invalid_request_error',
+      param: null,
+      code: 'not_found'
+    }
+  }, 404)
 })
 
 export default {
