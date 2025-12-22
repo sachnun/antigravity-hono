@@ -17,7 +17,12 @@ export const App = () => {
 
   const handleLogin = useCallback((key: string) => {
     localStorage.setItem('adminKey', key)
-    refetch()
+    refetch().then((result) => {
+      if (!result.data?.isAdmin) {
+        localStorage.removeItem('adminKey')
+        toast.error('Invalid admin key')
+      }
+    })
   }, [refetch])
 
   const handleLogout = useCallback(() => {
