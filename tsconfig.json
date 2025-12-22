@@ -10,7 +10,9 @@
       "DOM"
     ],
     "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx"
+    "jsxImportSource": "hono/jsx",
+    "types": ["@cloudflare/workers-types"]
   },
+  "include": ["src"],
   "exclude": ["web", "node_modules"]
 }
