@@ -463,7 +463,7 @@ const WARMUP_MODELS: Record<string, string> = {
   claude: 'claude-sonnet-4-5',
   'gemini-3-pro': 'gemini-3-pro-low',
   'gemini-3-flash': 'gemini-3-flash',
-  'gemini-2.5-flash': 'gemini-2.5-flash-lite',
+  'gemini-2.5-flash': 'gemini-2.5-flash',
 }
 
 async function sendWarmupRequest(
