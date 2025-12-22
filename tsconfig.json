@@ -12,5 +12,5 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx"
   },
-  "exclude": ["src/client"]
+  "exclude": ["web", "node_modules"]
 }

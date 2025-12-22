@@ -27,10 +27,10 @@ import {
 } from './anthropic'
 import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, warmUpAllAccounts, type StoredToken } from './storage'
 import { withTokenRotation, type TokenInfo } from './shared/token-rotation'
-import { AuthPage } from './auth-ui'
 
 type Bindings = {
   DB: D1Database
+  ASSETS: Fetcher
   ADMIN_KEY?: string
   API_KEY?: string
   ENVIRONMENT?: string
@@ -582,8 +582,8 @@ app.delete('/admin/token', adminAuth, async (c) => {
   return c.json({ success: true })
 })
 
-app.get('/auth', (c) => {
-  return c.html(<AuthPage />)
+app.get('/auth', async (c) => {
+  return c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
 })
 
 app.get('/admin/accounts', async (c) => {
@@ -657,9 +657,17 @@ app.onError((err, c) => {
   return c.json({ error: err.message, details: isDev ? err.stack : undefined }, 500)
 })
 
+app.notFound(async (c) => {
+  const url = new URL(c.req.url)
+  if (url.pathname.startsWith('/v1/') || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/auth/')) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  return c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
+})
+
 export default {
   fetch: app.fetch,
-  async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+  async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
       Promise.all([
         handleTokenRefresh(env.DB).then((result) => {
