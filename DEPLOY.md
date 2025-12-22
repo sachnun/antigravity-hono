@@ -20,6 +20,7 @@ Click the deploy button above to deploy directly via [Cloudflare Deploy Button](
 git clone https://github.com/sachnun/antigravity-hono.git
 cd antigravity-hono
 bun install
+cd web && bun install && cd ..
 ```
 
 ### 2. Create D1 Database
@@ -67,21 +68,37 @@ Or via [Cloudflare Dashboard](https://dash.cloudflare.com/) > Workers & Pages > 
 bun run deploy
 ```
 
+This command will:
+1. Build the React frontend (`web/dist/`)
+2. Apply D1 migrations
+3. Deploy Worker with static assets
+
 ## Cloudflare Dashboard Configuration
 
 After deployment, configure these settings in [Cloudflare Dashboard](https://dash.cloudflare.com/).
+
+### Build Configuration (Git-based Deploys)
+
+Navigate to: **Workers & Pages** > **Your Worker** > **Settings** > **Build**
+
+| Setting | Value |
+|---------|-------|
+| Build command | `bun run build:web` |
+| Deploy command | `bun wrangler deploy` |
+| Root directory | `/` |
 
 ### Build Watch Paths
 
 Navigate to: **Workers & Pages** > **Your Worker** > **Settings** > **Build** > **Build watch paths**
 
-Configure [build watch paths](https://developers.cloudflare.com/pages/configuration/build-watch-paths/) to prevent unnecessary rebuilds when non-essential files change.
+Configure [build watch paths](https://developers.cloudflare.com/pages/configuration/build-watch-paths/) to trigger rebuilds only when relevant files change.
 
 **Include paths:**
 
 ```
 src/**
 drizzle/**
+web/**
 package.json
 wrangler.jsonc
 tsconfig.json
@@ -92,7 +109,6 @@ tsconfig.json
 - `README.md`
 - `AGENTS.md`
 - `DEPLOY.md`
-- `scripts/**`
 - `.gitignore`
 
 ### Environment Variables
