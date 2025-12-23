@@ -1,4 +1,5 @@
 import { CODE_ASSIST_ENDPOINTS, CODE_ASSIST_HEADERS } from '../constants'
+import { DEFAULT_RATE_LIMIT_DELAY_MS } from './constants'
 
 export interface ApiRequestOptions {
   path: string
@@ -7,6 +8,8 @@ export interface ApiRequestOptions {
   accessToken: string
   stream?: boolean
 }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export async function apiRequest(options: ApiRequestOptions): Promise<Response> {
   const { path, method = 'POST', body, accessToken, stream = false } = options
@@ -21,8 +24,14 @@ export async function apiRequest(options: ApiRequestOptions): Promise<Response> 
   const requestBody = body ? JSON.stringify(body) : undefined
 
   for (const endpoint of CODE_ASSIST_ENDPOINTS) {
-    const response = await fetch(`${endpoint}${path}`, { method, headers, body: requestBody })
-    if (response.status !== 429) return response
+    let lastResponse: Response | null = null
+    for (let retry = 0; retry < 3; retry++) {
+      const response = await fetch(`${endpoint}${path}`, { method, headers, body: requestBody })
+      if (response.status !== 429) return response
+      lastResponse = response
+      if (retry < 2) await sleep(500 * (retry + 1))
+    }
+    if (lastResponse && lastResponse.status !== 429) return lastResponse
   }
 
   const lastEndpoint = CODE_ASSIST_ENDPOINTS[CODE_ASSIST_ENDPOINTS.length - 1]
