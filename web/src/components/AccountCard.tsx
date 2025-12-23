@@ -1,6 +1,19 @@
 import type { Account } from '@/lib/types'
 import { QuotaBar } from './QuotaBar'
 
+const formatDuration = (until: number) => {
+  const diff = until - Date.now()
+  if (diff <= 0) return null
+
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  const secs = Math.floor((diff % (1000 * 60)) / 1000)
+
+  if (hours > 0) return `${hours}h ${mins}m`
+  if (mins > 0) return `${mins}m ${secs}s`
+  return `${secs}s`
+}
+
 const formatExpiry = (expiresAt?: number) => {
   if (!expiresAt) return { text: 'Unknown', cls: '' }
   const diff = expiresAt - Date.now()
@@ -24,9 +37,8 @@ export const AccountCard = ({ account, isAdmin, onDelete }: AccountCardProps) =>
   const email = account.email
   const quota = account.quota
 
-  const geminiRL = account.rateLimitUntil?.gemini
-  const claudeRL = account.rateLimitUntil?.claude
-  const hasRL = (geminiRL && Date.now() < geminiRL) || (claudeRL && Date.now() < claudeRL)
+  const rateLimitUntil = account.rateLimitUntil
+  const hasRL = rateLimitUntil && Date.now() < rateLimitUntil
 
   const expiry = account.expiresAt ? formatExpiry(account.expiresAt) : null
 
@@ -48,6 +60,15 @@ export const AccountCard = ({ account, isAdmin, onDelete }: AccountCardProps) =>
           {hasRL && <span className="bg-amber-500 text-black px-2 py-0.5 rounded text-xs font-semibold">RATE LIMITED</span>}
         </div>
       </div>
+
+      {hasRL && rateLimitUntil && (
+        <div className="text-xs text-amber-400 mb-3">
+          <div className="flex justify-between">
+            <span>Rate limit resets in</span>
+            <span>{formatDuration(rateLimitUntil)}</span>
+          </div>
+        </div>
+      )}
 
       {isAdmin && account.projectId && (
         <div className="text-xs text-neutral-500 space-y-1">

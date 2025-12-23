@@ -16,7 +16,7 @@ export type Account = {
   projectId?: string
   tier?: string
   expiresAt?: number
-  rateLimitUntil?: { gemini?: number; claude?: number }
+  rateLimitUntil?: number
   quota?: Quota | null
 }
 

@@ -600,8 +600,10 @@ app.get('/admin/accounts', async (c) => {
 
   const quotaByEmail = Object.fromEntries(quotas.map((q) => [q.email, q]))
 
+  const tokens = await getAllTokens(c.env.DB)
+  const tokenByEmail = Object.fromEntries(tokens.map((t) => [t.email, t]))
+
   if (isAdmin) {
-    const tokens = await getAllTokens(c.env.DB)
     const accounts = tokens.map((t) => ({
       email: t.email,
       projectId: t.projectId,
@@ -613,10 +615,15 @@ app.get('/admin/accounts', async (c) => {
     return c.json({ accounts, isAdmin, fetchedAt: Date.now() })
   }
 
-  const accounts = quotas.map((q) => ({
-    email: maskEmail(q.email),
-    quota: q,
-  }))
+  const accounts = quotas.map((q) => {
+    const token = tokenByEmail[q.email]
+    return {
+      email: maskEmail(q.email),
+      tier: token?.tier,
+      rateLimitUntil: token?.rateLimitUntil,
+      quota: q,
+    }
+  })
   return c.json({ accounts, isAdmin, fetchedAt: Date.now() })
 })
 
