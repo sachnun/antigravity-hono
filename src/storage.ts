@@ -45,13 +45,8 @@ export interface StoredToken {
   expiresAt: number
   email: string
   tier?: string
-  rateLimitUntil?: {
-    gemini?: number
-    claude?: number
-  }
+  rateLimitUntil?: number
 }
-
-export type ModelFamily = 'gemini' | 'claude'
 
 function tokenFromRow(row: Token): StoredToken {
   return {
@@ -61,15 +56,8 @@ function tokenFromRow(row: Token): StoredToken {
     projectId: row.projectId,
     expiresAt: row.expiresAt,
     tier: row.tier ?? undefined,
-    rateLimitUntil: {
-      gemini: row.geminiRateLimitUntil ?? undefined,
-      claude: row.claudeRateLimitUntil ?? undefined,
-    },
+    rateLimitUntil: row.rateLimitUntil ?? undefined,
   }
-}
-
-function getModelFamily(model: string): ModelFamily {
-  return model.includes('claude') ? 'claude' : 'gemini'
 }
 
 export async function getAllTokens(db: D1Database): Promise<StoredToken[]> {
@@ -87,19 +75,16 @@ export async function getAllTokens(db: D1Database): Promise<StoredToken[]> {
 
 export async function getTokenForModel(
   db: D1Database,
-  model: string,
+  _model: string,
   excludeEmails: string[] = []
 ): Promise<StoredToken | null> {
   const d1 = drizzle(db)
   const now = Date.now()
-  const family = getModelFamily(model)
-
-  const rateLimitColumn = family === 'claude' ? tokens.claudeRateLimitUntil : tokens.geminiRateLimitUntil
 
   const available = await d1
     .select()
     .from(tokens)
-    .where(or(isNull(rateLimitColumn), lt(rateLimitColumn, now)))
+    .where(or(isNull(tokens.rateLimitUntil), lt(tokens.rateLimitUntil, now)))
 
   const filteredAvailable = available.filter(t => !excludeEmails.includes(t.email))
   if (filteredAvailable.length > 0) {
@@ -123,12 +108,11 @@ export interface SmartTokenResult {
 
 export async function getSmartTokenForModel(
   db: D1Database,
-  model: string,
+  _model: string,
   excludeEmails: string[] = []
 ): Promise<SmartTokenResult> {
   const d1 = drizzle(db)
   const now = Date.now()
-  const family = getModelFamily(model)
 
   const all = await d1.select().from(tokens)
   const filtered = all.filter(t => !excludeEmails.includes(t.email))
@@ -137,11 +121,8 @@ export async function getSmartTokenForModel(
     return { token: null, waitMs: null, nearestEmail: null }
   }
 
-  const getRateLimitUntil = (t: Token) => 
-    family === 'claude' ? t.claudeRateLimitUntil : t.geminiRateLimitUntil
-
   const available = filtered.filter(t => {
-    const rl = getRateLimitUntil(t)
+    const rl = t.rateLimitUntil
     return !rl || rl < now
   })
 
@@ -154,7 +135,7 @@ export async function getSmartTokenForModel(
   let nearestWait = Infinity
 
   for (const t of filtered) {
-    const rl = getRateLimitUntil(t)
+    const rl = t.rateLimitUntil
     if (rl) {
       const wait = rl - now
       if (wait < nearestWait) {
@@ -208,18 +189,13 @@ export async function getTokenWithAutoWait(
 export async function markRateLimited(
   db: D1Database,
   email: string,
-  model: string,
+  _model: string,
   retryAfterMs: number
 ): Promise<void> {
   const d1 = drizzle(db)
-  const family = getModelFamily(model)
   const until = Date.now() + retryAfterMs
 
-  const updateData = family === 'claude'
-    ? { claudeRateLimitUntil: until, updatedAt: Date.now() }
-    : { geminiRateLimitUntil: until, updatedAt: Date.now() }
-
-  await d1.update(tokens).set(updateData).where(eq(tokens.email, email))
+  await d1.update(tokens).set({ rateLimitUntil: until, updatedAt: Date.now() }).where(eq(tokens.email, email))
   invalidateCache()
 }
 
@@ -235,8 +211,7 @@ export async function setStoredToken(db: D1Database, token: StoredToken): Promis
       projectId: token.projectId,
       expiresAt: token.expiresAt,
       tier: token.tier,
-      geminiRateLimitUntil: token.rateLimitUntil?.gemini,
-      claudeRateLimitUntil: token.rateLimitUntil?.claude,
+      rateLimitUntil: token.rateLimitUntil,
       updatedAt: Date.now(),
     })
     .onConflictDoUpdate({
@@ -247,8 +222,7 @@ export async function setStoredToken(db: D1Database, token: StoredToken): Promis
         projectId: token.projectId,
         expiresAt: token.expiresAt,
         tier: token.tier,
-        geminiRateLimitUntil: token.rateLimitUntil?.gemini,
-        claudeRateLimitUntil: token.rateLimitUntil?.claude,
+        rateLimitUntil: token.rateLimitUntil,
         updatedAt: Date.now(),
       },
     })

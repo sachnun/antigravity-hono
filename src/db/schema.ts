@@ -7,12 +7,10 @@ export const tokens = sqliteTable('tokens', {
   projectId: text('project_id').notNull(),
   expiresAt: integer('expires_at').notNull(),
   tier: text('tier'),
-  geminiRateLimitUntil: integer('gemini_rate_limit_until'),
-  claudeRateLimitUntil: integer('claude_rate_limit_until'),
+  rateLimitUntil: integer('rate_limit_until'),
   updatedAt: integer('updated_at').$defaultFn(() => Date.now()),
 }, (table) => [
-  index('gemini_rate_limit_idx').on(table.geminiRateLimitUntil),
-  index('claude_rate_limit_idx').on(table.claudeRateLimitUntil),
+  index('rate_limit_idx').on(table.rateLimitUntil),
 ])
 
 export type Token = typeof tokens.$inferSelect

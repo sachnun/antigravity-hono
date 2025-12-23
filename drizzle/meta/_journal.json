@@ -8,6 +8,13 @@
       "when": 1766057062117,
       "tag": "0000_lazy_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1766500000000,
+      "tag": "0001_simplify_rate_limit",
+      "breakpoints": true
     }
   ]
 }
