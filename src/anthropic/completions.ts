@@ -110,16 +110,15 @@ export async function handleAnthropicMessage(
   const tools = convertAnthropicToolsToGemini(request.tools as AnthropicTool[])
 
   const thinkingRequested = request.thinking?.type === 'enabled'
-  const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled' 
-    ? request.thinking.budget_tokens 
+  const thinkingBudget = thinkingRequested && request.thinking?.type === 'enabled'
+    ? request.thinking.budget_tokens
     : undefined
   const inToolLoop = isInToolLoop(contents)
   const hasThinking = hasThinkingInHistory(contents)
   const thinkingEnabled = thinkingRequested && (!inToolLoop || hasThinking)
 
-  const generationConfig: Record<string, unknown> = {
-    maxOutputTokens: request.max_tokens,
-  }
+  const generationConfig: Record<string, unknown> = {}
+  if (request.max_tokens !== undefined) generationConfig.maxOutputTokens = request.max_tokens
   if (request.temperature !== undefined) generationConfig.temperature = request.temperature
   if (request.top_p !== undefined) generationConfig.topP = request.top_p
   if (request.top_k !== undefined) generationConfig.topK = request.top_k
@@ -132,7 +131,7 @@ export async function handleAnthropicMessage(
     }
     const currentMax = request.max_tokens
     const requiredMax = thinkingBudget + THINKING_OUTPUT_BUFFER
-    if (currentMax <= thinkingBudget) {
+    if (currentMax && currentMax <= thinkingBudget) {
       generationConfig.maxOutputTokens = requiredMax
     }
   }
@@ -341,9 +340,8 @@ export async function handleAnthropicMessageStream(
   const hasThinking = hasThinkingInHistory(contents)
   const thinkingEnabled = thinkingRequested && (!inToolLoop || hasThinking)
 
-  const generationConfig: Record<string, unknown> = {
-    maxOutputTokens: request.max_tokens,
-  }
+  const generationConfig: Record<string, unknown> = {}
+  if (request.max_tokens !== undefined) generationConfig.maxOutputTokens = request.max_tokens
   if (request.temperature !== undefined) generationConfig.temperature = request.temperature
   if (request.top_p !== undefined) generationConfig.topP = request.top_p
   if (request.top_k !== undefined) generationConfig.topK = request.top_k
@@ -356,7 +354,7 @@ export async function handleAnthropicMessageStream(
     }
     const currentMax = request.max_tokens
     const requiredMax = thinkingBudget + THINKING_OUTPUT_BUFFER
-    if (currentMax <= thinkingBudget) {
+    if (currentMax && currentMax <= thinkingBudget) {
       generationConfig.maxOutputTokens = requiredMax
     }
   }

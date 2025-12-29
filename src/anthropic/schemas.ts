@@ -6,10 +6,9 @@ const TextContentBlockSchema = z.object({
 })
 
 const ImageSourceSchema = z.object({
-  type: z.enum(['base64', 'url']),
-  media_type: z.enum(['image/jpeg', 'image/png', 'image/gif', 'image/webp']).optional(),
-  data: z.string().optional(),
-  url: z.string().optional(),
+  type: z.string(),
+  media_type: z.string(),
+  data: z.string(),
 })
 
 const ImageContentBlockSchema = z.object({
@@ -22,6 +21,8 @@ const ToolUseContentBlockSchema = z.object({
   id: z.string(),
   name: z.string(),
   input: z.record(z.string(), z.unknown()),
+  signature: z.string().optional(),
+  cache_control: z.record(z.string(), z.unknown()).optional(),
 })
 
 const ToolResultContentBlockSchema = z.object({
@@ -30,14 +31,29 @@ const ToolResultContentBlockSchema = z.object({
   content: z.union([
     z.string(),
     z.array(z.union([TextContentBlockSchema, ImageContentBlockSchema])),
+    z.record(z.string(), z.unknown()),
   ]).optional(),
   is_error: z.boolean().optional(),
+})
+
+const ServerToolUseContentBlockSchema = z.object({
+  type: z.literal('server_tool_use'),
+  id: z.string(),
+  name: z.string(),
+  input: z.record(z.string(), z.unknown()),
+})
+
+const WebSearchToolResultContentBlockSchema = z.object({
+  type: z.literal('web_search_tool_result'),
+  tool_use_id: z.string(),
+  content: z.record(z.string(), z.unknown()),
 })
 
 const ThinkingContentBlockSchema = z.object({
   type: z.literal('thinking'),
   thinking: z.string(),
-  signature: z.string(),
+  signature: z.string().optional(),
+  cache_control: z.record(z.string(), z.unknown()).optional(),
 })
 
 const RedactedThinkingContentBlockSchema = z.object({
@@ -52,6 +68,8 @@ const ContentBlockSchema = z.union([
   ToolResultContentBlockSchema,
   ThinkingContentBlockSchema,
   RedactedThinkingContentBlockSchema,
+  ServerToolUseContentBlockSchema,
+  WebSearchToolResultContentBlockSchema,
 ])
 
 const MessageContentSchema = z.union([
@@ -71,9 +89,10 @@ const ToolInputSchemaSchema = z.object({
 })
 
 const ToolSchema = z.object({
-  name: z.string(),
+  type: z.string().optional(),
+  name: z.string().optional(),
   description: z.string().optional(),
-  input_schema: ToolInputSchemaSchema,
+  input_schema: ToolInputSchemaSchema.optional(),
 })
 
 const ToolChoiceAutoSchema = z.object({
@@ -128,7 +147,7 @@ const SystemContentSchema = z.union([
 export const AnthropicMessageRequestSchema = z.object({
   model: z.string(),
   messages: z.array(MessageParamSchema),
-  max_tokens: z.number().int().min(1),
+  max_tokens: z.number().int().min(1).optional(),
   system: SystemContentSchema.optional(),
   stop_sequences: z.array(z.string()).optional(),
   stream: z.boolean().optional(),
@@ -151,7 +170,7 @@ const ResponseTextBlockSchema = z.object({
 const ResponseThinkingBlockSchema = z.object({
   type: z.literal('thinking'),
   thinking: z.string(),
-  signature: z.string(),
+  signature: z.string().optional(),
 })
 
 const ResponseToolUseBlockSchema = z.object({
@@ -170,8 +189,7 @@ const ResponseContentBlockSchema = z.union([
 const UsageSchema = z.object({
   input_tokens: z.number().int(),
   output_tokens: z.number().int(),
-  cache_creation_input_tokens: z.number().int().optional(),
-  cache_read_input_tokens: z.number().int().optional(),
+  server_tool_use: z.record(z.string(), z.unknown()).optional(),
 })
 
 export const AnthropicMessageResponseSchema = z.object({
@@ -180,7 +198,7 @@ export const AnthropicMessageResponseSchema = z.object({
   role: z.literal('assistant'),
   content: z.array(ResponseContentBlockSchema),
   model: z.string(),
-  stop_reason: z.enum(['end_turn', 'max_tokens', 'stop_sequence', 'tool_use']).nullable(),
+  stop_reason: z.string(),
   stop_sequence: z.string().nullable().optional(),
   usage: UsageSchema,
 }).openapi('AnthropicMessageResponse')
@@ -213,3 +231,15 @@ export type AnthropicModelInfo = z.infer<typeof AnthropicModelInfoSchema>
 export type AnthropicModelsListResponse = z.infer<typeof AnthropicModelsListResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
 export type ResponseContentBlock = z.infer<typeof ResponseContentBlockSchema>
+
+export function isWebSearchTool(tool: z.infer<typeof ToolSchema>): boolean {
+  if (tool.type && tool.type.startsWith('web_search')) return true
+  if (tool.name === 'web_search') return true
+  return false
+}
+
+export function getToolName(tool: z.infer<typeof ToolSchema>): string {
+  if (tool.name) return tool.name
+  if (tool.type && tool.type.startsWith('web_search')) return 'web_search'
+  return 'unknown'
+}
