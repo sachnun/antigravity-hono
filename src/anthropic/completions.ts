@@ -404,29 +404,16 @@ export async function handleAnthropicMessageStream(
   let contentBlockIndex = 0
   let buffer = ''
   let outputTokens = 0
+  let inputTokens = 0
   let isFirstTextChunk = true
   let isFirstThinkingChunk = true
   let textBlockStarted = false
   let thinkingBlockStarted = false
+  let messageStartSent = false
   const currentToolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = []
 
   const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-    start(controller) {
-      const messageStart = {
-        type: 'message_start',
-        message: {
-          id: messageId,
-          type: 'message',
-          role: 'assistant',
-          content: [],
-          model: resolvedModel,
-          stop_reason: null,
-          stop_sequence: null,
-          usage: { input_tokens: 0, output_tokens: 0 },
-        },
-      }
-      controller.enqueue(encoder.encode(`event: message_start\ndata: ${JSON.stringify(messageStart)}\n\n`))
-    },
+    start() {},
     transform(chunk, controller) {
       buffer += decoder.decode(chunk, { stream: true })
       const lines = buffer.split('\n')
@@ -445,6 +432,28 @@ export async function handleAnthropicMessageStream(
           const geminiData = parsed as AntigravityResponse
           const candidate = geminiData.response?.candidates?.[0]
           const parts = candidate?.content?.parts ?? []
+
+          if (!messageStartSent) {
+            const usageMetadata = geminiData.response?.usageMetadata
+            const messageStart = {
+              type: 'message_start',
+              message: {
+                id: messageId,
+                type: 'message',
+                role: 'assistant',
+                content: [],
+                model: resolvedModel,
+                stop_reason: null,
+                stop_sequence: null,
+                usage: {
+                  input_tokens: usageMetadata?.promptTokenCount ?? 0,
+                  output_tokens: 0,
+                },
+              },
+            }
+            controller.enqueue(encoder.encode(`event: message_start\ndata: ${JSON.stringify(messageStart)}\n\n`))
+            messageStartSent = true
+          }
 
           for (const part of parts) {
             if (part.text) {
@@ -539,7 +548,13 @@ export async function handleAnthropicMessageStream(
 
           if (candidate?.finishReason) {
             if (geminiData.response?.usageMetadata) {
-              outputTokens = geminiData.response.usageMetadata.candidatesTokenCount ?? 0
+              const metadata = geminiData.response.usageMetadata
+              if (metadata.promptTokenCount !== undefined) {
+                inputTokens = metadata.promptTokenCount
+              }
+              if (metadata.candidatesTokenCount !== undefined) {
+                outputTokens = metadata.candidatesTokenCount
+              }
             }
           }
         } catch {}
@@ -561,7 +576,10 @@ export async function handleAnthropicMessageStream(
       const messageDelta = {
         type: 'message_delta',
         delta: { stop_reason: stopReason, stop_sequence: null },
-        usage: { output_tokens: outputTokens },
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+        },
       }
       controller.enqueue(encoder.encode(`event: message_delta\ndata: ${JSON.stringify(messageDelta)}\n\n`))
 
