@@ -187,7 +187,7 @@ async function collectStreamingResponse(
   accessToken: string,
   model: string,
   includeThinking: boolean
-): Promise<AnthropicMessageResponse> {
+): Promise<AnthropicMessageResponse | Response> {
   const response = await apiRequest({
     path: '/v1internal:streamGenerateContent?alt=sse',
     body: wrappedBody,
@@ -197,7 +197,13 @@ async function collectStreamingResponse(
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(errorText)
+    return new Response(JSON.stringify({
+      type: 'error',
+      error: { type: 'api_error', message: errorText },
+    }), {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   const messageId = generateMessageId()
@@ -282,7 +288,9 @@ async function collectStreamingResponse(
             outputTokens = geminiData.response.usageMetadata.candidatesTokenCount ?? 0
           }
         }
-      } catch {}
+      } catch (e) {
+        console.error('[stream parse]', e)
+      }
     }
   }
 
@@ -395,6 +403,10 @@ export async function handleAnthropicMessageStream(
       status: response.status,
       headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  if (!response.body) {
+    return new Response('No response body', { status: 500 })
   }
 
   const messageId = generateMessageId()
@@ -557,7 +569,9 @@ export async function handleAnthropicMessageStream(
               }
             }
           }
-        } catch {}
+        } catch (e) {
+          console.error('[stream parse]', e)
+        }
       }
     },
     flush(controller) {
@@ -587,10 +601,6 @@ export async function handleAnthropicMessageStream(
       controller.enqueue(encoder.encode(`event: message_stop\ndata: ${JSON.stringify(messageStop)}\n\n`))
     },
   })
-
-  if (!response.body) {
-    return new Response('No response body', { status: 500 })
-  }
 
   return response.body.pipeThrough(transformStream)
 }

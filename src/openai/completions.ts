@@ -193,7 +193,7 @@ async function collectStreamingResponse(
   accessToken: string,
   model: string,
   includeThoughts: boolean
-): Promise<ChatCompletionResponse> {
+): Promise<ChatCompletionResponse | Response> {
   const response = await apiRequest({
     path: '/v1internal:streamGenerateContent?alt=sse',
     body: wrappedBody,
@@ -305,7 +305,9 @@ async function collectStreamingResponse(
             }
           }
         }
-      } catch {}
+      } catch (e) {
+        console.error('[stream parse]', e)
+      }
     }
   }
 
@@ -489,6 +491,10 @@ export async function handleChatCompletionStream(
     })
   }
 
+  if (!response.body) {
+    return new Response('No response body', { status: 500 })
+  }
+
   const completionId = generateCompletionId()
   const created = Math.floor(Date.now() / 1000)
   const encoder = new TextEncoder()
@@ -620,17 +626,15 @@ export async function handleChatCompletionStream(
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalChunk)}\n\n`))
           }
-        } catch {}
+        } catch (e) {
+          console.error('[stream parse]', e)
+        }
       }
     },
     flush(controller) {
       controller.enqueue(encoder.encode('data: [DONE]\n\n'))
     },
   })
-
-  if (!response.body) {
-    return new Response('No response body', { status: 500 })
-  }
 
   return response.body.pipeThrough(transformStream)
 }

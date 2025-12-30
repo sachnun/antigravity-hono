@@ -27,6 +27,7 @@ import {
 } from './anthropic'
 import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, warmUpAllAccounts, type StoredToken } from './storage'
 import { withTokenRotation, type TokenInfo } from './shared/token-rotation'
+import { safeCompare } from './shared/utils'
 
 type Bindings = {
   DB: D1Database
@@ -40,6 +41,21 @@ const app = new OpenAPIHono<{ Bindings: Bindings }>()
 
 app.use('*', cors())
 
+const ExchangeBodySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(1),
+})
+
+const RefreshBodySchema = z.object({
+  refreshToken: z.string().min(1),
+})
+
+const CallbackBodySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(1),
+  redirectUri: z.string().optional(),
+})
+
 app.get('/auth/authorize', async (c) => {
   const redirectUri = c.req.query('redirectUri')
   const result = await authorizeAntigravity(redirectUri)
@@ -47,14 +63,20 @@ app.get('/auth/authorize', async (c) => {
 })
 
 app.post('/auth/exchange', async (c) => {
-  const body = await c.req.json<{ code: string; state: string }>()
-  const result = await exchangeAntigravity(body.code, body.state)
+  const parsed = ExchangeBodySchema.safeParse(await c.req.json())
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid request', details: parsed.error.message }, 400)
+  }
+  const result = await exchangeAntigravity(parsed.data.code, parsed.data.state)
   return c.json(result)
 })
 
 app.post('/auth/refresh', async (c) => {
-  const body = await c.req.json<{ refreshToken: string }>()
-  const result = await refreshAccessToken(body.refreshToken)
+  const parsed = RefreshBodySchema.safeParse(await c.req.json())
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid request', details: parsed.error.message }, 400)
+  }
+  const result = await refreshAccessToken(parsed.data.refreshToken)
   return c.json(result)
 })
 
@@ -207,8 +229,8 @@ const chatCompletionsRoute = createRoute({
 app.openapi(chatCompletionsRoute, async (c): Promise<Response> => {
   const apiKey = c.env.API_KEY
   if (apiKey) {
-    const authHeader = c.req.header('Authorization')
-    if (authHeader !== `Bearer ${apiKey}`) {
+    const authHeader = c.req.header('Authorization') ?? ''
+    if (!safeCompare(authHeader, `Bearer ${apiKey}`)) {
       return c.json({ error: 'Invalid API key' }, 401)
     }
   }
@@ -448,8 +470,8 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
   const xApiKey = c.req.header('x-api-key')
 
   if (apiKey) {
-    const providedKey = xApiKey ?? authHeader?.replace('Bearer ', '')
-    if (providedKey !== apiKey) {
+    const providedKey = xApiKey ?? authHeader?.replace('Bearer ', '') ?? ''
+    if (!safeCompare(providedKey, apiKey)) {
       return c.json({
         type: 'error',
         error: { type: 'authentication_error', message: 'Invalid API key' },
@@ -507,7 +529,11 @@ app.openapi(anthropicMessagesRoute, async (c): Promise<Response> => {
 
 const adminAuth = createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
   const adminKey = c.env.ADMIN_KEY
-  if (adminKey && c.req.header('Authorization') !== `Bearer ${adminKey}`) {
+  if (!adminKey) {
+    return c.json({ error: 'Admin access disabled' }, 403)
+  }
+  const authHeader = c.req.header('Authorization') ?? ''
+  if (!safeCompare(authHeader, `Bearer ${adminKey}`)) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
   await next()
@@ -586,15 +612,15 @@ app.get('/auth', async (c) => {
 
 app.get('/admin/accounts', async (c) => {
   const adminKey = c.env.ADMIN_KEY
-  const authHeader = c.req.header('Authorization')
-  const isAdmin = !adminKey || authHeader === `Bearer ${adminKey}`
+  const authHeader = c.req.header('Authorization') ?? ''
+  const isAdmin = !adminKey || safeCompare(authHeader, `Bearer ${adminKey}`)
 
   const quotas = await getAllAccountsQuota(c.env.DB)
 
   const maskEmail = (email: string) => {
     const [local, domain] = email.split('@')
-    if (!domain) return email
-    const masked = local.length <= 2 ? local[0] + '***' : local.slice(0, 2) + '***'
+    if (!domain || !local) return email
+    const masked = local.length <= 2 ? (local[0] ?? '') + '***' : local.slice(0, 2) + '***'
     return `${masked}@${domain}`
   }
 
@@ -628,17 +654,12 @@ app.get('/admin/accounts', async (c) => {
 })
 
 app.post('/auth/callback', async (c) => {
-  const body = await c.req.json<{
-    code: string
-    state: string
-    redirectUri?: string
-  }>()
-
-  if (!body.code || !body.state) {
-    return c.json({ error: 'Missing code or state' }, 400)
+  const parsed = CallbackBodySchema.safeParse(await c.req.json())
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid request', details: parsed.error.message }, 400)
   }
 
-  const result = await exchangeAntigravity(body.code, body.state, body.redirectUri)
+  const result = await exchangeAntigravity(parsed.data.code, parsed.data.state, parsed.data.redirectUri)
   
   if (!result.email) {
     return c.json({ error: 'Failed to get email from Google' }, 400)
@@ -659,7 +680,11 @@ app.post('/auth/callback', async (c) => {
 
 app.onError((err, c) => {
   const isDev = c.env.ENVIRONMENT === 'development'
-  return c.json({ error: err.message, details: isDev ? err.stack : undefined }, 500)
+  console.error('[error]', err)
+  return c.json({
+    error: isDev ? err.message : 'Internal server error',
+    details: isDev ? err.stack : undefined
+  }, 500)
 })
 
 app.notFound((c) => {

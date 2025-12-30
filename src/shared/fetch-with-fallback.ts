@@ -1,5 +1,4 @@
 import { CODE_ASSIST_ENDPOINTS, CODE_ASSIST_HEADERS } from '../constants'
-import { DEFAULT_RATE_LIMIT_DELAY_MS } from './constants'
 
 export interface ApiRequestOptions {
   path: string
