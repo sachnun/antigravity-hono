@@ -67,7 +67,7 @@ curl -X POST https://YOUR_WORKER_URL/v1/chat/completions \
 
 ## Deployment
 
-See [DEPLOY.md](DEPLOY.md) for full deployment configuration.
+See [Deployment Guide](docs/DEPLOY.md) for full deployment configuration.
 
 ```sh
 wrangler secret put ADMIN_KEY
@@ -80,7 +80,7 @@ bun run deploy
 | Document | Description |
 |----------|-------------|
 | [API Reference](docs/API.md) | Endpoints, authentication, examples |
-| [Deployment Guide](DEPLOY.md) | Cloudflare setup, environment variables |
+| [Deployment Guide](docs/DEPLOY.md) | Cloudflare setup, environment variables |
 | [Architecture](docs/ARCHITECTURE.md) | System design, components, request flow |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues, debugging, FAQ |
 
