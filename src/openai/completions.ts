@@ -1,4 +1,4 @@
-import { apiRequest } from '../shared/fetch-with-fallback'
+import { apiRequest } from '../lib/fetch-with-fallback'
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -7,17 +7,17 @@ import type {
 import {
   type RateLimitInfo,
   extractRateLimitInfo,
-} from '../shared/rate-limit'
+} from '../lib/rate-limit'
 import {
   generateRequestId,
   generateCompletionId,
   generateToolCallId,
   isInToolLoop,
   hasThinkingInHistory,
-} from '../shared/utils'
-import { convertOpenAIMessagesToGemini, convertOpenAIToolsToGemini, type OpenAIMessage } from '../shared/gemini-converter'
-import type { AntigravityResponse } from '../shared/gemini-types'
-import { THINKING_OUTPUT_BUFFER } from '../shared/constants'
+} from '../lib/utils'
+import { convertOpenAIMessagesToGemini, convertOpenAIToolsToGemini, type OpenAIMessage } from '../providers/gemini/converter'
+import type { AntigravityResponse } from '../providers/gemini/types'
+import { THINKING_OUTPUT_BUFFER } from '../constants'
 
 export { extractRateLimitInfo, type RateLimitInfo }
 

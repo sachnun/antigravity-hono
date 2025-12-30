@@ -1,5 +1,5 @@
-import type { GeminiContent, GeminiTool } from './gemini-types'
-import { ensureObjectSchema } from './schema-utils'
+import type { GeminiContent, GeminiTool } from './types'
+import { ensureObjectSchema } from '../../lib/schema-utils'
 
 export interface OpenAIMessage {
   role: string

@@ -1,4 +1,4 @@
-import { apiRequest } from '../shared/fetch-with-fallback'
+import { apiRequest } from '../lib/fetch-with-fallback'
 import type {
   AnthropicMessageRequest,
   AnthropicMessageResponse,
@@ -8,17 +8,17 @@ import { resolveModelAlias } from './models'
 import {
   type RateLimitInfo,
   extractRateLimitInfo,
-} from '../shared/rate-limit'
+} from '../lib/rate-limit'
 import {
   generateRequestId,
   generateMessageId,
   generateToolUseId,
   isInToolLoop,
   hasThinkingInHistory,
-} from '../shared/utils'
-import { convertAnthropicMessagesToGemini, convertAnthropicToolsToGemini, type AnthropicMessage, type AnthropicTool } from '../shared/gemini-converter'
-import type { AntigravityResponse } from '../shared/gemini-types'
-import { THINKING_OUTPUT_BUFFER } from '../shared/constants'
+} from '../lib/utils'
+import { convertAnthropicMessagesToGemini, convertAnthropicToolsToGemini, type AnthropicMessage, type AnthropicTool } from '../providers/gemini/converter'
+import type { AntigravityResponse } from '../providers/gemini/types'
+import { THINKING_OUTPUT_BUFFER } from '../constants'
 
 export { extractRateLimitInfo, type RateLimitInfo }
 
