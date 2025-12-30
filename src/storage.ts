@@ -9,15 +9,17 @@ import {
   GROUP_DISPLAY_NAMES,
 } from './constants'
 import { parseRateLimitDelay } from './shared/rate-limit'
-import { CACHE_TTL_MS, MAX_AUTO_WAIT_MS, TOKEN_EXPIRY_BUFFER_MS } from './shared/constants'
+import { CACHE_TTL_MS, MAX_AUTO_WAIT_MS, TOKEN_EXPIRY_BUFFER_MS, MAX_TOKEN_RETRY_DEPTH } from './shared/constants'
 export { parseRateLimitDelay }
 
 let cachedTokens: StoredToken[] | null = null
 let cacheTimestamp = 0
+let cachePromise: Promise<StoredToken[]> | null = null
 
 function invalidateCache(): void {
   cachedTokens = null
   cacheTimestamp = 0
+  cachePromise = null
 }
 
 export interface QuotaGroupInfo {
@@ -66,11 +68,18 @@ export async function getAllTokens(db: D1Database): Promise<StoredToken[]> {
     return cachedTokens
   }
 
-  const d1 = drizzle(db)
-  const rows = await d1.select().from(tokens)
-  cachedTokens = rows.map(tokenFromRow)
-  cacheTimestamp = now
-  return cachedTokens
+  if (cachePromise) return cachePromise
+
+  cachePromise = (async () => {
+    const d1 = drizzle(db)
+    const rows = await d1.select().from(tokens)
+    cachedTokens = rows.map(tokenFromRow)
+    cacheTimestamp = Date.now()
+    cachePromise = null
+    return cachedTokens
+  })()
+
+  return cachePromise
 }
 
 export async function getTokenForModel(
@@ -159,8 +168,11 @@ export async function getSmartTokenForModel(
 export async function getTokenWithAutoWait(
   db: D1Database,
   model: string,
-  excludeEmails: string[] = []
+  excludeEmails: string[] = [],
+  depth: number = 0
 ): Promise<{ accessToken: string; projectId: string; email: string } | null> {
+  if (depth >= MAX_TOKEN_RETRY_DEPTH) return null
+
   const result = await getSmartTokenForModel(db, model, excludeEmails)
 
   if (result.token) {
@@ -175,12 +187,12 @@ export async function getTokenWithAutoWait(
     if (refreshed) {
       return { accessToken: refreshed.accessToken, projectId: refreshed.projectId, email: refreshed.email }
     }
-    return getTokenWithAutoWait(db, model, [...excludeEmails, result.token.email])
+    return getTokenWithAutoWait(db, model, [...excludeEmails, result.token.email], depth + 1)
   }
 
   if (result.waitMs !== null && result.waitMs <= MAX_AUTO_WAIT_MS && result.nearestEmail) {
     await new Promise(resolve => setTimeout(resolve, result.waitMs! + 100))
-    return getTokenWithAutoWait(db, model, excludeEmails)
+    return getTokenWithAutoWait(db, model, excludeEmails, depth + 1)
   }
 
   return null
