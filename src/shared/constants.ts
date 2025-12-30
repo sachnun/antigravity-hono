@@ -1,6 +1,0 @@
-export const CACHE_TTL_MS = 30 * 1000
-export const MAX_AUTO_WAIT_MS = 25 * 1000
-export const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000
-export const DEFAULT_RATE_LIMIT_DELAY_MS = 60_000
-export const THINKING_OUTPUT_BUFFER = 4096
-export const MAX_TOKEN_RETRY_DEPTH = 10

@@ -1,5 +1,6 @@
-import { getAllTokens, getTokenWithAutoWait, markRateLimited, parseRateLimitDelay } from '../storage'
-import { DEFAULT_RATE_LIMIT_DELAY_MS } from './constants'
+import { getAllTokens, getTokenWithAutoWait, markRateLimited } from '../services/tokens'
+import { parseRateLimitDelay } from './rate-limit'
+import { DEFAULT_RATE_LIMIT_DELAY_MS } from '../constants'
 
 export interface TokenInfo {
   accessToken: string

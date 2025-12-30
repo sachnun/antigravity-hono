@@ -5,7 +5,7 @@ import { createMiddleware } from 'hono/factory'
 import { z } from '@hono/zod-openapi'
 import {
   ErrorSchema,
-} from './schemas'
+} from './auth-schemas'
 import { authorizeAntigravity, exchangeAntigravity, refreshAccessToken } from './oauth'
 import {
   handleChatCompletion,
@@ -25,9 +25,11 @@ import {
   AnthropicMessageResponseSchema,
   AnthropicErrorSchema,
 } from './anthropic'
-import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, getAllAccountsQuota, warmUpAllAccounts, type StoredToken } from './storage'
-import { withTokenRotation, type TokenInfo } from './shared/token-rotation'
-import { safeCompare } from './shared/utils'
+import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, type StoredToken } from './services/tokens'
+import { getAllAccountsQuota } from './services/quota'
+import { warmUpAllAccounts } from './services/warmup'
+import { withTokenRotation, type TokenInfo } from './lib/token-rotation'
+import { safeCompare } from './lib/utils'
 
 type Bindings = {
   DB: D1Database
