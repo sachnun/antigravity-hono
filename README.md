@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com)
 
-> OpenAI and Anthropic compatible API proxy powered by Google Antigravity
+OpenAI and Anthropic compatible API proxy powered by Google Antigravity, built with [Hono](https://hono.dev) on [Cloudflare Workers](https://workers.cloudflare.com)
 
-**Warning**: This project uses Google's internal/undocumented API. Use at your own risk.
+> **Warning**: This project uses Google's internal/undocumented API. Use at your own risk.
 
 ## Features
 
