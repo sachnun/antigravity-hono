@@ -18,6 +18,10 @@ bun test                 # Run all tests
 bun test tests/lib/errors.test.ts           # Single test file
 bun test --watch         # Watch mode
 
+# Type checking
+npx tsc --noEmit         # Check types (root)
+cd web && npx tsc -b     # Check types (web)
+
 # Database
 wrangler d1 migrations apply antigravity-auth --local   # Local migrations
 bun run migrate          # Remote migrations
@@ -25,6 +29,41 @@ bun run migrate          # Remote migrations
 # Deploy
 bun run deploy           # Build web + migrate + deploy
 bun run cf-typegen       # Generate Cloudflare bindings types
+```
+
+## Project Structure
+
+```
+src/
+  index.tsx              # App entry, routes, middleware
+  constants.ts           # Config constants (endpoints, timeouts, model groups)
+  oauth.ts               # Google OAuth flow
+  auth-schemas.ts        # Shared auth Zod schemas
+  openai/                # OpenAI-compatible API
+    index.ts             # Exports
+    completions.ts       # Chat completion handlers
+    models.ts            # Model definitions
+    schemas.ts           # Request/response Zod schemas
+  anthropic/             # Anthropic-compatible API (same structure)
+  providers/gemini/      # Gemini API converter/types
+  db/schema.ts           # Drizzle schema (tokens table)
+  graphql/               # GraphQL API (schema, resolvers, context)
+  lib/                   # Shared utilities
+    errors.ts            # API error formatters
+    rate-limit.ts        # Rate limit parsing
+    token-rotation.ts    # Multi-account token rotation
+    utils.ts             # Helpers (safeCompare, maskEmail, ID generators)
+  services/              # Business logic
+    tokens.ts            # Token CRUD, refresh, rate limit tracking
+    quota.ts             # Account quota queries
+    warmup.ts            # Model warmup logic
+tests/                   # Mirrors src/ structure
+web/                     # React dashboard (separate package)
+  src/
+    components/          # UI components
+    hooks/               # React Query hooks
+    lib/                 # API client, types
+drizzle/                 # D1 migrations
 ```
 
 ## Code Style
@@ -37,7 +76,7 @@ bun run cf-typegen       # Generate Cloudflare bindings types
 
 ### Imports
 - Relative imports within modules: `./schemas`, `../lib/utils`
-- Path aliases in web only: `@/components`, `@/hooks`
+- Path aliases in web only: `@/components`, `@/hooks`, `@/lib`
 
 ### Naming
 - Files: kebab-case (`token-rotation.ts`)
