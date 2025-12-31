@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useAccounts, useDeleteAccount, useRefreshTokens, useWarmup } from '@/hooks/useAccounts'
-import { AccountCard } from '@/components/AccountCard'
+import { AccountList } from '@/components/AccountList'
 import { LoginForm } from '@/components/LoginForm'
 import { AddAccountForm } from '@/components/AddAccountForm'
 import { Toaster, toast } from '@/components/Toast'
@@ -109,15 +109,12 @@ export const App = () => {
               </div>
             )}
 
-            <div className="mt-4 max-h-[calc(100vh-280px)] overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent hover:scrollbar-thumb-neutral-600">
-              {accounts.map((account) => (
-                <AccountCard
-                  key={account.email}
-                  account={account}
-                  isAdmin={isAdmin}
-                  onDelete={isAdmin ? handleDelete : undefined}
-                />
-              ))}
+            <div className="mt-4">
+              <AccountList
+                accounts={accounts}
+                isAdmin={isAdmin}
+                onDelete={handleDelete}
+              />
             </div>
           </div>
 
