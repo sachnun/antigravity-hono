@@ -37,14 +37,26 @@ export function hasThinkingInHistory(contents: Array<{ role: string; parts: Arra
 }
 
 export function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
   const encoder = new TextEncoder()
   const bufA = encoder.encode(a)
   const bufB = encoder.encode(b)
-  if (bufA.length !== bufB.length) return false
-  let result = 0
-  for (let i = 0; i < bufA.length; i++) {
-    result |= bufA[i] ^ bufB[i]
+
+  const maxLen = Math.max(bufA.length, bufB.length)
+  const paddedA = new Uint8Array(maxLen)
+  const paddedB = new Uint8Array(maxLen)
+  paddedA.set(bufA)
+  paddedB.set(bufB)
+
+  let result = bufA.length ^ bufB.length
+  for (let i = 0; i < maxLen; i++) {
+    result |= paddedA[i] ^ paddedB[i]
   }
   return result === 0
+}
+
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!domain || !local) return email
+  const masked = local.length <= 2 ? (local[0] ?? '') + '***' : local.slice(0, 2) + '***'
+  return `${masked}@${domain}`
 }
