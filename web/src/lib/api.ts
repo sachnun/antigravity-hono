@@ -1,13 +1,64 @@
 import type { AccountsResponse } from './types'
 
+const GRAPHQL_ENDPOINT = '/graphql'
+
 const getAuthHeaders = (): Record<string, string> => {
   const adminKey = localStorage.getItem('adminKey') || ''
   return adminKey ? { Authorization: `Bearer ${adminKey}` } : {}
 }
 
+async function graphqlRequest<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(GRAPHQL_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ query, variables }),
+  })
+
+  const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> }
+
+  if (json.errors?.length) {
+    throw new Error(json.errors.map((e) => e.message).join('; '))
+  }
+
+  if (!json.data) {
+    throw new Error('No data returned from GraphQL')
+  }
+
+  return json.data
+}
+
+const ACCOUNTS_QUERY = `
+  query GetAccounts {
+    accounts {
+      accounts {
+        email
+        projectId
+        tier
+        expiresAt
+        rateLimitUntil
+        quota {
+          email
+          status
+          error
+          groups {
+            displayName
+            remainingFraction
+            resetTimestamp
+          }
+        }
+      }
+      isAdmin
+      fetchedAt
+    }
+  }
+`
+
 export const fetchAccounts = async (): Promise<AccountsResponse> => {
-  const res = await fetch('/admin/accounts', { headers: getAuthHeaders() })
-  return res.json()
+  const data = await graphqlRequest<{ accounts: AccountsResponse }>(ACCOUNTS_QUERY)
+  return data.accounts
 }
 
 export const generateAuthUrl = async (): Promise<{ url: string }> => {
@@ -16,6 +67,18 @@ export const generateAuthUrl = async (): Promise<{ url: string }> => {
   })
   return res.json()
 }
+
+const ADD_ACCOUNT_MUTATION = `
+  mutation AddAccount($input: AddAccountInput!) {
+    addAccount(input: $input) {
+      success
+      email
+      projectId
+      tier
+      expiresAt
+    }
+  }
+`
 
 export const exchangeToken = async (callbackUrl: string): Promise<{ email?: string; error?: string }> => {
   const url = new URL(callbackUrl)
@@ -26,41 +89,59 @@ export const exchangeToken = async (callbackUrl: string): Promise<{ email?: stri
     throw new Error('Invalid URL - missing code or state')
   }
 
-  const res = await fetch('/auth/callback', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    body: JSON.stringify({ code, state, redirectUri: 'http://localhost:9999/' }),
+  const data = await graphqlRequest<{ addAccount: { email: string } }>(ADD_ACCOUNT_MUTATION, {
+    input: { code, state, redirectUri: 'http://localhost:9999/' },
   })
 
-  const data = (await res.json()) as { email?: string; error?: string }
-  if (!res.ok) throw new Error(data.error || 'Exchange failed')
-  return data
+  return { email: data.addAccount.email }
 }
+
+const DELETE_ACCOUNT_MUTATION = `
+  mutation DeleteAccount($email: String!) {
+    deleteAccount(email: $email) {
+      success
+    }
+  }
+`
 
 export const deleteAccount = async (email: string): Promise<void> => {
-  const res = await fetch(`/admin/token?email=${encodeURIComponent(email)}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  })
-  if (!res.ok) throw new Error('Delete failed')
+  await graphqlRequest(DELETE_ACCOUNT_MUTATION, { email })
 }
+
+const REFRESH_TOKENS_MUTATION = `
+  mutation RefreshTokens {
+    refreshTokens {
+      success
+      refreshed
+      errors
+    }
+  }
+`
 
 export const refreshAllTokens = async (): Promise<{ refreshed: number }> => {
-  const res = await fetch('/admin/token/refresh', {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  })
-  const data = (await res.json()) as { refreshed?: number; error?: string }
-  if (!res.ok) throw new Error(data.error || 'Refresh failed')
-  return { refreshed: data.refreshed ?? 0 }
+  const data = await graphqlRequest<{ refreshTokens: { refreshed: number } }>(REFRESH_TOKENS_MUTATION)
+  return { refreshed: data.refreshTokens.refreshed }
 }
 
-export const warmupAccounts = async (): Promise<{ results: Array<{ email: string; warmedUp: string[]; skipped: string[] }> }> => {
-  const res = await fetch('/admin/warmup', {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  })
-  const data = (await res.json()) as { results: Array<{ email: string; warmedUp: string[]; skipped: string[] }> }
-  if (!res.ok) throw new Error('Warmup failed')
-  return data
+const WARMUP_ACCOUNTS_MUTATION = `
+  mutation WarmupAccounts {
+    warmupAccounts {
+      email
+      warmedUp
+      skipped
+      errors {
+        group
+        error
+      }
+    }
+  }
+`
+
+export const warmupAccounts = async (): Promise<{
+  results: Array<{ email: string; warmedUp: string[]; skipped: string[] }>
+}> => {
+  const data = await graphqlRequest<{
+    warmupAccounts: Array<{ email: string; warmedUp: string[]; skipped: string[] }>
+  }>(WARMUP_ACCOUNTS_MUTATION)
+  return { results: data.warmupAccounts }
 }

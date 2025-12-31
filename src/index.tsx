@@ -3,10 +3,14 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
 import { z } from '@hono/zod-openapi'
+import { createYoga, createSchema } from 'graphql-yoga'
 import {
   ErrorSchema,
 } from './auth-schemas'
 import { authorizeAntigravity, exchangeAntigravity, refreshAccessToken } from './oauth'
+import { typeDefs } from './graphql/schema'
+import { resolvers } from './graphql/resolvers'
+import type { GraphQLContext } from './graphql/context'
 import {
   handleChatCompletion,
   handleChatCompletionStream,
@@ -29,7 +33,7 @@ import { setStoredToken, handleTokenRefresh, getAllTokens, deleteStoredToken, ty
 import { getAllAccountsQuota } from './services/quota'
 import { warmUpAllAccounts } from './services/warmup'
 import { withTokenRotation, type TokenInfo } from './lib/token-rotation'
-import { safeCompare } from './lib/utils'
+import { safeCompare, maskEmail } from './lib/utils'
 
 type Bindings = {
   DB: D1Database
@@ -42,6 +46,26 @@ type Bindings = {
 const app = new OpenAPIHono<{ Bindings: Bindings }>()
 
 app.use('*', cors())
+
+// GraphQL endpoint
+const graphqlSchema = createSchema({
+  typeDefs,
+  resolvers,
+})
+
+const yoga = createYoga<GraphQLContext>({
+  schema: graphqlSchema,
+  graphqlEndpoint: '/graphql',
+  landingPage: false,
+})
+
+app.all('/graphql', async (c) => {
+  const adminKey = c.env.ADMIN_KEY
+  const authHeader = c.req.header('Authorization') ?? ''
+  const isAdmin = !adminKey || safeCompare(authHeader, `Bearer ${adminKey}`)
+
+  return yoga.handle(c.req.raw, { db: c.env.DB, isAdmin })
+})
 
 const ExchangeBodySchema = z.object({
   code: z.string().min(1),
@@ -618,13 +642,6 @@ app.get('/admin/accounts', async (c) => {
   const isAdmin = !adminKey || safeCompare(authHeader, `Bearer ${adminKey}`)
 
   const quotas = await getAllAccountsQuota(c.env.DB)
-
-  const maskEmail = (email: string) => {
-    const [local, domain] = email.split('@')
-    if (!domain || !local) return email
-    const masked = local.length <= 2 ? (local[0] ?? '') + '***' : local.slice(0, 2) + '***'
-    return `${masked}@${domain}`
-  }
 
   const quotaByEmail = Object.fromEntries(quotas.map((q) => [q.email, q]))
 
