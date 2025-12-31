@@ -97,19 +97,14 @@ export const App = () => {
               )}
             </div>
 
-            {isLoading ? (
+            {isLoading && (
               <div className="flex items-center gap-2 p-3 rounded-md text-sm bg-blue-500/10 border border-blue-500/30 text-blue-500">
                 <span className="w-2 h-2 rounded-full bg-current" />
                 <span>Loading...</span>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 p-3 rounded-md text-sm bg-green-500/10 border border-green-500/30 text-green-500">
-                <span className="w-2 h-2 rounded-full bg-current" />
-                <span>{accounts.length} account(s) {isAdmin ? 'configured' : 'available'}</span>
-              </div>
             )}
 
-            <div className="mt-4">
+            <div className={isLoading ? 'mt-4' : ''}>
               <AccountList
                 accounts={accounts}
                 isAdmin={isAdmin}

@@ -1,15 +1,15 @@
 import { useState, useMemo } from 'react'
-import type { Account, QuotaGroup } from '@/lib/types'
+import type { Account } from '@/lib/types'
 import { AccountCard } from './AccountCard'
 
 type AggregatedStats = {
   totalAccounts: number
   rateLimited: number
-  quotaGroups: Map<string, { total: number; sum: number; resetTimestamp?: number }>
+  quotaGroups: Map<string, { total: number; sum: number }>
 }
 
 const aggregateStats = (accounts: Account[]): AggregatedStats => {
-  const quotaGroups = new Map<string, { total: number; sum: number; resetTimestamp?: number }>()
+  const quotaGroups = new Map<string, { total: number; sum: number }>()
 
   let rateLimited = 0
 
@@ -24,14 +24,10 @@ const aggregateStats = (accounts: Account[]): AggregatedStats => {
         if (existing) {
           existing.total++
           existing.sum += group.remainingFraction ?? 0
-          if (group.resetTimestamp && (!existing.resetTimestamp || group.resetTimestamp < existing.resetTimestamp)) {
-            existing.resetTimestamp = group.resetTimestamp
-          }
         } else {
           quotaGroups.set(group.displayName, {
             total: 1,
             sum: group.remainingFraction ?? 0,
-            resetTimestamp: group.resetTimestamp,
           })
         }
       }
@@ -48,20 +44,6 @@ const getQuotaClass = (fraction: number | null) => {
   return 'bg-green-500'
 }
 
-const formatRelativeTime = (timestamp?: number) => {
-  if (!timestamp) return null
-  const diff = timestamp - Date.now()
-  if (diff <= 0) return 'Now'
-
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-  const days = Math.floor(hours / 24)
-
-  if (days > 0) return `${days}d ${hours % 24}h`
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
-}
-
 type AccountListProps = {
   accounts: Account[]
   isAdmin: boolean
@@ -73,13 +55,12 @@ export const AccountList = ({ accounts, isAdmin, onDelete }: AccountListProps) =
 
   const stats = useMemo(() => aggregateStats(accounts), [accounts])
 
-  const aggregatedGroups: QuotaGroup[] = useMemo(() => {
-    const result: QuotaGroup[] = []
+  const aggregatedGroups = useMemo(() => {
+    const result: { displayName: string; remainingFraction: number | null }[] = []
     for (const [name, data] of stats.quotaGroups) {
       result.push({
         displayName: name,
         remainingFraction: data.total > 0 ? data.sum / data.total : null,
-        resetTimestamp: data.resetTimestamp,
       })
     }
     return result
@@ -119,7 +100,6 @@ export const AccountList = ({ accounts, isAdmin, onDelete }: AccountListProps) =
             {aggregatedGroups.map((group) => {
               const pct = group.remainingFraction !== null ? Math.round(group.remainingFraction * 100) : 0
               const cls = getQuotaClass(group.remainingFraction)
-              const resetText = formatRelativeTime(group.resetTimestamp)
 
               return (
                 <div key={group.displayName}>
@@ -130,7 +110,6 @@ export const AccountList = ({ accounts, isAdmin, onDelete }: AccountListProps) =
                   <div className="h-2 bg-neutral-900 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full transition-all ${cls}`} style={{ width: `${pct}%` }} />
                   </div>
-                  {resetText && <div className="text-[11px] text-neutral-600 mt-1">Reset: {resetText}</div>}
                 </div>
               )
             })}
