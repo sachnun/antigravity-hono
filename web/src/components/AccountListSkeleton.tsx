@@ -15,7 +15,7 @@ export const AccountListSkeleton = () => {
 
       {/* Quota bars skeleton */}
       <div className="space-y-3">
-        {[1, 2].map((i) => (
+        {[1, 2, 3, 4].map((i) => (
           <div key={i}>
             <div className="flex justify-between items-center mb-1">
               <SkeletonBar className="h-3 w-24" />
