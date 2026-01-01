@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useAccounts, useDeleteAccount, useRefreshTokens, useWarmup } from '@/hooks/useAccounts'
 import { AccountList } from '@/components/AccountList'
+import { AccountListSkeleton } from '@/components/AccountListSkeleton'
 import { AdminLoginModal } from '@/components/AdminLoginModal'
 import { AddAccountForm } from '@/components/AddAccountForm'
 import { Toaster, toast } from '@/components/Toast'
@@ -125,20 +126,15 @@ export const App = () => {
               )}
             </div>
 
-            {isLoading && (
-              <div className="flex items-center gap-2 p-3 rounded-md text-sm bg-blue-500/10 border border-blue-500/30 text-blue-500">
-                <span className="w-2 h-2 rounded-full bg-current" />
-                <span>Loading...</span>
-              </div>
-            )}
-
-            <div className={isLoading ? 'mt-4' : ''}>
+            {isLoading ? (
+              <AccountListSkeleton />
+            ) : (
               <AccountList
                 accounts={accounts}
                 isAdmin={isAdmin}
                 onDelete={handleDelete}
               />
-            </div>
+            )}
           </div>
 
           <div className="lg:col-span-2 space-y-4">
