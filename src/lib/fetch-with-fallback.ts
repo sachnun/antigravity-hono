@@ -27,6 +27,9 @@ export async function apiRequest(options: ApiRequestOptions): Promise<Response> 
     for (let retry = 0; retry < 3; retry++) {
       const response = await fetch(`${endpoint}${path}`, { method, headers, body: requestBody })
       if (response.status !== 429) return response
+      // Log and cancel the body to prevent stalled response deadlock
+      const errorText = await response.text()
+      console.warn(`[429 Retry] endpoint: ${endpoint}, path: ${path}, retry: ${retry + 1}/3, error: ${errorText}`)
       lastResponse = response
       if (retry < 2) await sleep(500 * (retry + 1))
     }

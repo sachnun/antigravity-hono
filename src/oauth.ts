@@ -99,7 +99,11 @@ export async function fetchProjectInfo(accessToken: string): Promise<ProjectInfo
       }),
     })
 
-    if (!response.ok) continue
+    if (!response.ok) {
+      // Cancel the body to prevent stalled response deadlock
+      await response.body?.cancel()
+      continue
+    }
 
     const data = await response.json() as Record<string, unknown>
     

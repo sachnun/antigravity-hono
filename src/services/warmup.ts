@@ -47,6 +47,8 @@ async function sendWarmupRequest(
     return { success: false, error: errorText }
   }
 
+  // Cancel the body to prevent stalled response deadlock
+  await response.body?.cancel()
   return { success: true }
 }
 

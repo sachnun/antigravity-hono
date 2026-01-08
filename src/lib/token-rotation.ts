@@ -49,8 +49,9 @@ export async function withTokenRotation<T>(
       
       if (result instanceof Response) {
         if (result.status === 429) {
-          const errorText = await result.clone().text()
+          const errorText = await result.text()
           const delayMs = parseRateLimitDelay(errorText) ?? DEFAULT_RATE_LIMIT_DELAY_MS
+          console.warn(`[429 Rate Limited] email: ${email}, model: ${options.model}, delay: ${delayMs}ms, error: ${errorText}`)
           await markRateLimited(db, email, options.model, delayMs)
           continue
         }
@@ -60,6 +61,7 @@ export async function withTokenRotation<T>(
       return result
     } catch (e) {
       if (e instanceof Error && e.message.includes('429')) {
+        console.warn(`[429 Rate Limited] email: ${email}, model: ${options.model}, delay: ${DEFAULT_RATE_LIMIT_DELAY_MS}ms, error: ${e.message}`)
         await markRateLimited(db, email, options.model, DEFAULT_RATE_LIMIT_DELAY_MS)
         lastError = e
         continue
